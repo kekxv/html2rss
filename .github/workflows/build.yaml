@@ -21,10 +21,9 @@ jobs:
       - name: Build step
         run: "deno task build"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v3
         with:
-          name: build-artifacts
+          name: html2rss
           path: |
             main.esm.js
             webroot
