@@ -21,29 +21,88 @@ args.forEach((arg) => {
 const app = new Application();
 const router = new Router();
 
-function generateRSS(
+function getRfc822Date(date: Date, h: number, m: number, s: number) {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const dayOfWeek = days[date.getUTCDay()];
+  const dayOfMonth = String(date.getUTCDate()).padStart(2, "0");
+  const month = months[date.getUTCMonth()];
+  const year = date.getUTCFullYear();
+  const hours = String(h || date.getUTCHours()).padStart(2, "0");
+  const minutes = String(m || date.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(s || date.getUTCSeconds()).padStart(2, "0");
+  const timezone = "GMT"; // 或者 "+0000"
+
+  return `${dayOfWeek}, ${dayOfMonth} ${month} ${year} ${hours}:${minutes}:${seconds} ${timezone}`;
+}
+async function hash(message: string) {
+  const data = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) =>
+    b.toString(16)
+      .padStart(2, "0")
+  ).join("");
+}
+
+async function generateRSS(
   title: string,
   link: string,
   description: string,
   items: { title: string; link: string }[],
-): string {
-  const rssItems = items
-    .map(
-      (item) => `
+): Promise<string> {
+  const rssItems = [];
+  let h = 1;
+  let m = 1;
+  for (const item of items) {
+    if (m >= 60) {
+      h++;
+      m = 1;
+    }
+    const date = getRfc822Date(new Date(), h, m++, 0);
+    if (item.link.startsWith("magnet:")) {
+      rssItems.push(`
     <item>
-      <title><![CDATA[${item.title}]]></title>
+      <title><![CDATA[${item.title.trim()}]]></title>
+      <link><![CDATA[${item.link}]]></link>
+      <guid>${await hash(item.link)}</guid>
+      <pubDate>${date}</pubDate>
+      <enclosure url="${
+        item.link.split("&")[0]
+      }" type="application/x-bittorrent"/>
+      <description><![CDATA[${(item.title||description).trim()}]]></description>
+    </item>`);
+    } else {
+      rssItems.push(`
+    <item>
+      <title><![CDATA[${item.title.trim()}]]></title>
       <link>${item.link}</link>
-      <guid>${item.title}</guid>
-    </item>`,
-    )
-    .join("");
-
+      <guid>${await hash(item.link)}</guid>
+      <pubDate>${date}</pubDate>
+      <description><![CDATA[${(item.title||description).trim()}]]></description>
+    </item>`);
+    }
+  }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title><![CDATA[${title}]]></title>
     <link>${link}</link>
-    <description><![CDATA[${description}]]></description>${rssItems}
+    <description><![CDATA[${description}]]></description>${rssItems.join("")}
   </channel>
 </rss>`;
 }
@@ -135,7 +194,7 @@ router.get("/html2rss", async (ctx) => {
 
   ctx.response.headers.set("Content-Type", "application/xml; charset=utf-8");
   ctx.response.status = 200;
-  ctx.response.body = generateRSS(
+  ctx.response.body = await generateRSS(
     list.title,
     url,
     list.description,
