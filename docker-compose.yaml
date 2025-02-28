@@ -1,0 +1,26 @@
+services:
+  app:
+    image: denoland/deno:alpine
+    command:
+      - "deno"
+      - "run"
+      - "--allow-net"
+      - "--allow-write"
+      - "--allow-read"
+      - "main.esm.js"
+      - "--webroot=/app/webroot"
+      - "--verification-code=test"
+      - "--port=3000"
+    working_dir: "/app"
+    volumes:
+      - .:/app:rw
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

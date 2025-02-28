@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>html2rss</title>
+    <script type="text/javascript">
+        function validateForm() {
+            var code = document.getElementById("code").value;
+            var t = document.getElementById("t").value;
+            var a = document.getElementById("a").value;
+            var charset = document.getElementById("charset").value;
+            var url = document.getElementById("url").value;
+            var ts = document.getElementById("ts").value;
+            var as = document.getElementById("as").value;
+            if (code === "" || a === "" || url === "") {
+                alert("所有字段都不能为空！");
+                return false;
+            }
+            var params = [];
+            if (!!code) {
+                params.push(`code=${encodeURIComponent(code)}`);
+            }
+            if (!!t) {
+                params.push(`t=${encodeURIComponent(t)}`);
+            }
+            if (!!a) {
+                params.push(`a=${encodeURIComponent(a)}`);
+            }
+            if (!!charset) {
+                params.push(`charset=${encodeURIComponent(charset)}`);
+            }
+            if (!!url) {
+                params.push(`url=${encodeURIComponent(url)}`);
+            }
+            if (!!ts) {
+                params.push(`ts=${encodeURIComponent(ts)}`);
+            }
+            if (!!as) {
+                params.push(`as=${encodeURIComponent(as)}`);
+            }
+
+            let rss = `${window.location.href.split("?")[0].replace("index.html", "")}html2rss?${params.join("&")}`;
+            document.getElementById("rss").value = rss;
+            alert(rss);
+            return false;
+        }
+
+        function copyRss() {
+            var rss = document.getElementById("rss").value;
+            navigator.clipboard.writeText(rss).then(function () {
+                alert('复制成功！');
+            }).catch(function (err) {
+                console.error('复制失败:', err);
+            });
+        }
+
+        window.onload = function () {
+            // 使用正则表达式获取url里面的code值并赋给表单的code字段
+            var regex = /code=([^&]+)/;
+            var match = regex.exec(window.location.search);
+            if (match) {
+                document.getElementById("code").value = match[1];
+            }
+        };
+    </script>
+    <style>
+        /* 通用 Input 样式 */
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        input[type="search"],
+        input[type="number"],
+        input[type="tel"],
+        input[type="url"],
+        textarea,
+        select {
+            appearance: none; /* 重置浏览器默认样式 */
+            box-sizing: border-box;
+            width: 100%; /* 或指定具体宽度 */
+            padding: 10px 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            color: #333;
+            outline: none; /* 移除默认 focus 时的 outline */
+            transition: border-color 0.3s ease; /* 平滑过渡边框颜色 */
+        }
+
+        /* Placeholder 样式 */
+        input::placeholder,
+        textarea::placeholder {
+            color: #999; /* 浅灰色 placeholder */
+            opacity: 1; /* Firefox 需要设置 opacity: 1 */
+        }
+
+        /* Focus 状态样式 */
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: #007bff; /* 焦点时边框颜色 */
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25); /* 可选：添加浅色阴影 */
+        }
+
+        /* Disabled 状态样式 */
+        input:disabled,
+        textarea:disabled,
+        select:disabled {
+            background-color: #f2f2f2;
+            color: #666;
+            border-color: #ddd;
+            cursor: not-allowed; /* 禁用状态光标 */
+        }
+
+        /* 只读 (readonly) 状态样式 (可选) */
+        input[readonly],
+        textarea[readonly] {
+            background-color: #eee;
+            color: #666;
+            border-color: #ddd;
+        }
+
+        /* 特殊类型的 Input 可以单独设置样式，例如 search input */
+        input[type="search"] {
+            /* 可以添加搜索图标等 */
+        }
+
+        /* Textarea 特有样式 */
+        textarea {
+            resize: vertical; /* 允许垂直方向调整大小 */
+            min-height: 100px; /* 设置最小高度 */
+        }
+
+        /* Select 下拉框特有样式 */
+        select {
+            /* 可以自定义下拉箭头，移除默认箭头等 */
+            /* 注意不同浏览器对 select 的样式自定义程度有限 */
+            -webkit-appearance: none; /* 移除 WebKit 浏览器默认箭头 */
+            -moz-appearance: none; /* 移除 Firefox 浏览器默认箭头 */
+            appearance: none; /* 标准语法移除默认箭头 */
+            background-image: url("data:image/svg+xml,..."); /* 自定义下拉箭头图标 (SVG 或 Base64) */
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 30px; /* 预留箭头空间 */
+        }
+
+        /* 移除 IE 和 Edge 浏览器的默认下拉箭头 (如果使用自定义箭头) */
+        select::-ms-expand {
+            display: none;
+        }
+
+        /* 通用 Button 样式 */
+        button,
+        input[type="button"],
+        input[type="submit"],
+        input[type="reset"] {
+            appearance: none; /* 重置浏览器默认样式 */
+            box-sizing: border-box;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none; /* 移除默认边框 */
+            border-radius: 4px;
+            background-color: #007bff; /* 默认背景色 */
+            color: #fff; /* 默认文字颜色 */
+            cursor: pointer;
+            outline: none; /* 移除默认 focus 时的 outline */
+            transition: background-color 0.3s ease, transform 0.2s ease; /* 平滑过渡背景色和形变 */
+        }
+
+        /* Hover 状态样式 */
+        button:hover,
+        input[type="button"]:hover,
+        input[type="submit"]:hover,
+        input[type="reset"]:hover {
+            background-color: #0056b3; /* Hover 时背景色 */
+        }
+
+        /* Focus 状态样式 (可选，根据设计需求决定是否需要) */
+        button:focus,
+        input[type="button"]:focus,
+        input[type="submit"]:focus,
+        input[type="reset"]:focus {
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.5); /* 可选：添加焦点阴影 */
+        }
+
+        /* Active 状态样式 (点击时) */
+        button:active,
+        input[type="button"]:active,
+        input[type="submit"]:active,
+        input[type="reset"]:active {
+            background-color: #004085; /* Active 时背景色 */
+            transform: scale(0.98); /* 可选：轻微缩小，模拟按下效果 */
+        }
+
+        /* Disabled 状态样式 */
+        button:disabled,
+        input[type="button"]:disabled,
+        input[type="submit"]:disabled,
+        input[type="reset"]:disabled {
+            background-color: #ccc;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* 不同类型的 Button 可以单独设置样式，例如 Primary Button, Secondary Button */
+        .button-primary {
+            background-color: #28a745; /* 绿色 Primary Button */
+            color: #fff;
+        }
+
+        .button-primary:hover {
+            background-color: #1e7e34;
+        }
+
+        .button-secondary {
+            background-color: #f8f9fa; /* 浅灰色 Secondary Button */
+            color: #333;
+            border: 1px solid #ccc;
+        }
+
+        .button-secondary:hover {
+            background-color: #e2e6ea;
+        }
+
+        /* 文本按钮 (Link Button) 风格 */
+        .button-link {
+            background-color: transparent;
+            color: #007bff;
+            border: none;
+            padding: 0; /* 移除默认 padding */
+            text-decoration: none; /* 移除默认下划线 (如果有需要) */
+        }
+
+        .button-link:hover {
+            text-decoration: underline; /* Hover 时添加下划线 */
+        }
+    </style>
+</head>
+<body style="padding: 2em;box-sizing: border-box;">
+<form action="./html2rss" method="GET" onsubmit="return validateForm()">
+    <!-- 表单输入字段 code、t、a、charset、url -->
+    <label for="code">验证码:</label><br>
+    <input style="width: 100%;" type="text" id="code" name="code"><br><br>
+    <label for="t">标题选择器:</label><br>
+    <input style="width: 100%;" type="text" id="t" name="t" placeholder="div.player_list > ul > li"><br><br>
+    <label for="ts">标题排序:</label><br>
+    <select id="ts">
+        <option value="a" selected>升序</option>
+        <option value="d">降序</option>
+    </select><br><br>
+    <label for="a">链接选择器(a[href^=magnet]):</label><br>
+    <input style="width: 100%;" type="text" id="a" name="a" placeholder="a[href^=magnet]"><br><br>
+    <label for="as">链接排序:</label><br>
+    <select id="as">
+        <option value="a" selected>升序</option>
+        <option value="d">降序</option>
+    </select><br><br>
+    <label for="charset">编码:</label><br>
+    <input style="width: 100%;" type="text" id="charset" name="charset" placeholder="UTF-8"><br><br>
+    <label for="url">html地址:</label><br>
+    <input style="width: 100%;" type="text" id="url" name="url"
+           placeholder="网页地址"><br><br>
+    <button class="button-primary" type="submit">生成RSS</button>
+</form>
+<br/>
+<div>
+    <!-- 复制的RSS链接 -->
+    <button class="button-primary" onclick="copyRss()">复制RSS链接</button>
+    <br>
+    <label for="rss">RSS链接:</label><br><textarea id="rss"></textarea>
+</div>
+</body>
+</html>
