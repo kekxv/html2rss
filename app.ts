@@ -84,7 +84,9 @@ async function generateRSS(
       <enclosure url="${
         item.link.split("&")[0]
       }" type="application/x-bittorrent"/>
-      <description><![CDATA[${(item.title||description).trim()}]]></description>
+      <description><![CDATA[${
+        (item.title || description).trim()
+      }]]></description>
     </item>`);
     } else {
       rssItems.push(`
@@ -93,7 +95,9 @@ async function generateRSS(
       <link>${item.link}</link>
       <guid>${await hash(item.link)}</guid>
       <pubDate>${date}</pubDate>
-      <description><![CDATA[${(item.title||description).trim()}]]></description>
+      <description><![CDATA[${
+        (item.title || description).trim()
+      }]]></description>
     </item>`);
     }
   }
@@ -111,11 +115,12 @@ async function takeHtml(
   url: string,
   charset: string,
   a_selector: string,
+  attr: string | null,
   a_sort: boolean,
   title_selector: string,
   title_sort: boolean,
 ) {
-  let html = null;
+  let html: string;
   if (!charset || charset.toLowerCase() === "utf-8") {
     html = await fetch(url).then((res) => res.text());
   } else {
@@ -151,7 +156,7 @@ async function takeHtml(
   for (let i = 0; i < links.length; i++) {
     const link = links[a_sort ? links.length - 1 - i : i];
     const title__ = titles[title_sort ? titles.length - 1 - i : i];
-    const magnetLink = link.getAttribute("href");
+    const magnetLink = link.getAttribute(attr || "href");
     if (magnetLink) {
       list.push({
         title: title__.textContent || link.textContent,
@@ -180,6 +185,7 @@ router.get("/html2rss", async (ctx) => {
   const charset = decodeURIComponent(urlSearchParams.get("charset") || "utf-8");
   const title_sort = decodeURIComponent(urlSearchParams.get("ts") || "a");
   const a_sort = decodeURIComponent(urlSearchParams.get("as") || "a");
+  const attr = decodeURIComponent(urlSearchParams.get("attr") || "");
   if (urlSearchParams.get("code") !== VERIFICATION_CODE) {
     throw new Error("Invalid verification code");
   }
@@ -187,6 +193,7 @@ router.get("/html2rss", async (ctx) => {
     url,
     charset,
     a,
+    attr,
     a_sort !== "a",
     title,
     title_sort !== "a",

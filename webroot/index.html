@@ -12,6 +12,7 @@
             var url = document.getElementById("url").value;
             var ts = document.getElementById("ts").value;
             var as = document.getElementById("as").value;
+            var attr = document.getElementById("attr").value;
             if (code === "" || a === "" || url === "") {
                 alert("所有字段都不能为空！");
                 return false;
@@ -25,6 +26,9 @@
             }
             if (!!a) {
                 params.push(`a=${encodeURIComponent(a)}`);
+            }
+            if (!!attr) {
+                params.push(`attr=${encodeURIComponent(attr)}`);
             }
             if (!!charset) {
                 params.push(`charset=${encodeURIComponent(charset)}`);
@@ -251,6 +255,8 @@
     </select><br><br>
     <label for="a">链接选择器(a[href^=magnet]):</label><br>
     <input style="width: 100%;" type="text" id="a" name="a" placeholder="a[href^=magnet]"><br><br>
+    <label for="attr">链接属性ATTR(href]):</label><br>
+    <input style="width: 100%;" type="text" id="attr" name="a" placeholder="href"><br><br>
     <label for="as">链接排序:</label><br>
     <select id="as">
         <option value="a" selected>升序</option>
