@@ -23,6 +23,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# 安装运行所需的系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # 从构建阶段拷贝虚拟环境
 COPY --from=builder /app/.venv /app/.venv
 

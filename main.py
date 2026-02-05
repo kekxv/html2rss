@@ -120,14 +120,27 @@ def clean_content_title(soup: BeautifulSoup, raw_title: str) -> str:
     return title.strip()
 
 async def fetch_html_raw(url: str) -> Tuple[str, bytes]:
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-        response = await client.get(url, headers=headers)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    }
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, headers=headers) as client:
+        response = await client.get(url)
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch: {url}")
+            raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch {url}: Status {response.status_code}")
+        
         results = charset_normalizer.from_bytes(response.content)
         detected = results.best()
-        return (str(detected) if detected else response.content.decode('utf-8', errors='replace')), response.content
+        if detected and detected.encoding:
+            try:
+                html = response.content.decode(detected.encoding, errors='replace')
+            except:
+                html = response.content.decode('utf-8', errors='replace')
+        else:
+            html = response.content.decode('utf-8', errors='replace')
+            
+        return html, response.content
 
 def process_pure_content(text: str) -> str:
     """通用正文清洗与分段"""
@@ -307,28 +320,49 @@ async def read_clean(url: str, code: str):
 async def detect_rules(url: str = Query(...), code: str = Query(...)):
     if code != VERIFICATION_CODE: return {"error": "Invalid verification code"}
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = await client.get(url, headers=headers)
-            results = charset_normalizer.from_bytes(response.content)
-            html_content = str(results.best())
+        html_content, _ = await fetch_html_raw(url)
         soup = BeautifulSoup(html_content, 'lxml')
         magnets = soup.select('a[href^="magnet:"]')
         if magnets:
             return {"a": 'a[href^="magnet:"]', "t": "a[href^='magnet:']", "attr": "href", "message": "Detected media links."}
-        novel_patterns = [r'第.*章', r'第.*节', r'Chapter', r'分卷', r'番外']
+        
+        novel_patterns = [r'第.*?[章节节回]', r'Chapter', r'分卷', r'番外', r'正文']
         all_links = soup.find_all('a', href=True)
-        novel_links = [l for l in all_links if any(re.search(p, l.get_text(strip=True)) for p in novel_patterns)]
-        if len(novel_links) > 5:
+        novel_links = []
+        for l in all_links:
+            text = l.get_text(strip=True)
+            if any(re.search(p, text) for p in novel_patterns):
+                novel_links.append(l)
+        
+        if len(novel_links) > 2: # 降低阈值，2个以上就开始尝试识别
             from collections import Counter
             parents = Counter()
             for l in novel_links[:20]:
                 p = l.parent
-                sel = p.name + (f"#{p.get('id')}" if p.get('id') else (f".{'.'.join(p.get('class'))}" if p.get('class') else ""))
+                if not p: continue
+                # 尝试构建更准确的选择器
+                classes = p.get('class')
+                class_str = f".{'.'.join(classes)}" if classes else ""
+                id_str = f"#{p.get('id')}" if p.get('id') else ""
+                sel = p.name + id_str + class_str
                 parents[sel] += 1
-            return {"a": f"{parents.most_common(1)[0][0]} a", "t": f"{parents.most_common(1)[0][0]} a", "attr": "href", "message": "Detected content list pattern."}
-        return {"error": "Could not detect patterns."}
-    except Exception as e: return {"error": str(e)}
+            
+            best_parent = parents.most_common(1)[0][0]
+            return {
+                "a": f"{best_parent} a", 
+                "t": f"{best_parent} a", 
+                "attr": "href", 
+                "message": f"Detected pattern with {len(novel_links)} items."
+            }
+        
+        if not all_links:
+            return {"error": "No links found on the page. Site might be blocking requests or requires JavaScript."}
+            
+        return {"error": "Could not detect patterns. Found " + str(len(novel_links)) + " content-like links."}
+    except HTTPException as e:
+        return {"error": f"HTTP {e.status_code}: {e.detail}"}
+    except Exception as e: 
+        return {"error": str(e)}
 
 @app.get("/html2rss")
 async def html2rss(
@@ -406,5 +440,19 @@ async def read_index(): return FileResponse('webroot/index.html')
 app.mount("/", StaticFiles(directory="webroot"), name="static")
 
 if __name__ == "__main__":
+
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+
+    import argparse
+
+    
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 3000)))
+
+    args = parser.parse_args()
+
+    
+
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
