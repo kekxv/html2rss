@@ -4,6 +4,7 @@ import string
 import json
 import re
 import base64
+import os
 from typing import List, Optional, Tuple
 import urllib.parse
 
@@ -18,7 +19,7 @@ import trafilatura
 app = FastAPI()
 
 # Verification code
-VERIFICATION_CODE = "test"
+VERIFICATION_CODE = os.getenv("VERIFICATION_CODE", "test")
 BASE62_ALPHABET = string.digits + string.ascii_letters
 
 def encode_base62(num: int) -> str:
