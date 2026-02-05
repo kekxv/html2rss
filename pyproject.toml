@@ -1,0 +1,14 @@
+[project]
+name = "html2rss"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "charset-normalizer>=3.4.4",
+    "fastapi>=0.128.1",
+    "httpx>=0.28.1",
+    "lxml>=6.0.2",
+    "uvicorn>=0.40.0",
+]

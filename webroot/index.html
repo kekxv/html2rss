@@ -1,280 +1,358 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>html2rss</title>
-    <script type="text/javascript">
-        function validateForm() {
-            var code = document.getElementById("code").value;
-            var t = document.getElementById("t").value;
-            var a = document.getElementById("a").value;
-            var charset = document.getElementById("charset").value;
-            var url = document.getElementById("url").value;
-            var ts = document.getElementById("ts").value;
-            var as = document.getElementById("as").value;
-            var attr = document.getElementById("attr").value;
-            if (code === "" || a === "" || url === "") {
-                alert("所有字段都不能为空！");
-                return false;
-            }
-            var params = [];
-            if (!!code) {
-                params.push(`code=${encodeURIComponent(code)}`);
-            }
-            if (!!t) {
-                params.push(`t=${encodeURIComponent(t)}`);
-            }
-            if (!!a) {
-                params.push(`a=${encodeURIComponent(a)}`);
-            }
-            if (!!attr) {
-                params.push(`attr=${encodeURIComponent(attr)}`);
-            }
-            if (!!charset) {
-                params.push(`charset=${encodeURIComponent(charset)}`);
-            }
-            if (!!url) {
-                params.push(`url=${encodeURIComponent(url)}`);
-            }
-            if (!!ts) {
-                params.push(`ts=${encodeURIComponent(ts)}`);
-            }
-            if (!!as) {
-                params.push(`as=${encodeURIComponent(as)}`);
-            }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML2RSS - 现代化网页转RSS订阅工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', -apple-system, sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .xml-tag { color: #f472b6; }
+        .xml-attr { color: #fbbf24; }
+        .xml-string { color: #34d399; }
+        .xml-cdata { color: #818cf8; font-style: italic; }
+        .glass-effect { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); }
+        .btn-transition { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .btn-transition:hover { transform: translateY(-1px); }
+        .btn-transition:active { transform: translateY(0); }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen text-slate-800 selection:bg-indigo-100 selection:text-indigo-700">
+    <div class="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="text-center mb-10">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-sm mb-4 border border-slate-100">
+                <i class="fas fa-rss text-3xl text-orange-500"></i>
+            </div>
+            <h1 class="text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">HTML2RSS</h1>
+            <p class="text-slate-500 font-medium">高效、简洁、智能的网页 RSS 提取方案</p>
+        </div>
 
-            let rss = `${window.location.href.split("?")[0].replace("index.html", "")}html2rss?${params.join("&")}`;
-            document.getElementById("rss").value = rss;
-            alert(rss);
-            return false;
+        <div class="bg-white shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden border border-slate-200/60 glass-effect">
+            <div class="p-6 sm:p-10">
+                <form id="rssForm" onsubmit="return generateRss(event)" class="space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                        <!-- Verification Code - Moved to top -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-bold text-indigo-700 mb-2 ml-1 flex items-center">
+                                <i class="fas fa-shield-halved mr-2"></i>访问验证码 (必填)
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i class="fas fa-key text-slate-400"></i>
+                                </div>
+                                <input type="password" id="code" required placeholder="请输入安全校验码以启用所有功能"
+                                    class="block w-full pl-11 pr-4 py-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm font-medium">
+                            </div>
+                        </div>
+
+                        <!-- URL Input -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-2 ml-1">网页地址 (URL)</label>
+                            <div class="flex space-x-3">
+                                <div class="relative flex-grow">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <i class="fas fa-link text-slate-400"></i>
+                                    </div>
+                                    <input type="url" id="url" required placeholder="https://example.com/movies" 
+                                        class="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                                </div>
+                                <button type="button" onclick="autoDetect()" id="detectBtn"
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-xl font-bold btn-transition shadow-lg shadow-indigo-200 flex items-center space-x-2 whitespace-nowrap">
+                                    <i class="fas fa-wand-magic-sparkles"></i>
+                                    <span class="hidden sm:inline">智能识别</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Selectors -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">链接选择器 (Required)</label>
+                            <input type="text" id="a" required placeholder="a[href^=magnet]" 
+                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                            <p class="text-[11px] text-slate-400 px-1">例如: .movie-list a[href*=torrent]</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">标题选择器 (Optional)</label>
+                            <input type="text" id="t" placeholder="div.item > h3" 
+                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                            <p class="text-[11px] text-slate-400 px-1">如果不填，则尝试从链接文字提取</p>
+                        </div>
+
+                        <!-- Attributes & Charset -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">链接属性</label>
+                            <input type="text" id="attr" placeholder="href" 
+                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">网页编码</label>
+                            <input type="text" id="charset" placeholder="auto" value="auto"
+                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+
+                        <!-- Sorting -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">标题排序</label>
+                            <select id="ts" class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer transition-all shadow-sm">
+                                <option value="a">升序 (正序)</option>
+                                <option value="d">降序 (倒序)</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">链接排序</label>
+                            <select id="as" class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer transition-all shadow-sm">
+                                <option value="a">升序 (正序)</option>
+                                <option value="d">降序 (倒序)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button type="button" onclick="testRss()" id="testBtn" class="bg-white hover:bg-slate-50 text-slate-700 font-bold py-4 px-6 rounded-2xl transition-all border-2 border-slate-100 flex items-center justify-center space-x-2">
+                            <i class="fas fa-vial"></i>
+                            <span>预览测试</span>
+                        </button>
+                        <button type="submit" class="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg shadow-orange-200 flex items-center justify-center space-x-2">
+                            <i class="fas fa-bolt"></i>
+                            <span>生成最终订阅地址</span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Preview Section -->
+                <div id="previewArea" class="mt-12 hidden space-y-4 animate-[fadeIn_0.3s_ease-out]">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-base font-bold text-slate-800 flex items-center">
+                            <span class="w-1.5 h-6 bg-indigo-500 rounded-full mr-3"></span>
+                            数据预览 (RSS Items)
+                        </h3>
+                        <button onclick="document.getElementById('previewArea').classList.add('hidden')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="bg-[#0f172a] rounded-2xl p-5 overflow-hidden border border-slate-800 shadow-2xl">
+                        <pre id="xmlPreview" class="text-xs sm:text-[13px] text-indigo-300 overflow-auto max-h-[400px] custom-scrollbar leading-relaxed font-mono"></pre>
+                    </div>
+                </div>
+
+                <!-- Result Section -->
+                <div id="resultArea" class="mt-12 hidden space-y-4 animate-[slideUp_0.3s_ease-out]">
+                    <div class="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-base font-bold text-emerald-900">生成成功！您的订阅链接如下</h3>
+                            <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full uppercase tracking-wider">Ready</span>
+                        </div>
+                        <div class="flex space-x-3">
+                            <input type="text" id="rssResult" readonly 
+                                class="block w-full px-4 py-3.5 bg-white border border-emerald-200 rounded-xl text-sm text-emerald-800 focus:outline-none font-medium shadow-inner">
+                            <button onclick="copyToClipboard()" id="copyBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3.5 rounded-xl font-bold transition-all shadow-md shadow-emerald-200 flex items-center space-x-2">
+                                <i class="fas fa-copy"></i>
+                                <span>复制</span>
+                            </button>
+                        </div>
+                        <p class="mt-3 text-xs text-emerald-600 font-medium">提示：请将此链接填入 qBittorrent 或其他 RSS 阅读器中。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-12 text-center text-slate-400 text-sm font-medium">
+            <p>&copy; 2026 HTML2RSS Tools &bull; 精简 &bull; 智能 &bull; 开源</p>
+        </div>
+    </div>
+
+    <script>
+        const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        function encodeBase62(bigint) {
+            if (bigint === 0n) return BASE62[0];
+            let result = "";
+            const base = BigInt(BASE62.length);
+            while (bigint > 0n) {
+                result = BASE62[Number(bigint % base)] + result;
+                bigint = bigint / base;
+            }
+            return result;
         }
 
-        function copyRss() {
-            var rss = document.getElementById("rss").value;
-            navigator.clipboard.writeText(rss).then(function () {
-                alert('复制成功！');
-            }).catch(function (err) {
-                console.error('复制失败:', err);
+        function stringToBigInt(str) {
+            const bytes = new TextEncoder().encode(str);
+            let hex = "";
+            bytes.forEach(b => hex += b.toString(16).padStart(2, '0'));
+            return BigInt("0x" + hex);
+        }
+
+        function getEncodedParams() {
+            const params = {};
+            const fields = ['url', 'a', 't', 'code', 'charset', 'ts', 'as', 'attr'];
+            fields.forEach(field => {
+                const el = document.getElementById(field);
+                if (el && el.value) params[field] = el.value;
             });
+            
+            const jsonStr = JSON.stringify(params);
+            const bigInt = stringToBigInt(jsonStr);
+            return encodeBase62(bigInt);
         }
 
-        window.onload = function () {
-            // 使用正则表达式获取url里面的code值并赋给表单的code字段
-            var regex = /code=([^&]+)/;
-            var match = regex.exec(window.location.search);
-            if (match) {
-                document.getElementById("code").value = match[1];
+        async function autoDetect() {
+            const url = document.getElementById('url').value;
+            const code = document.getElementById('code').value;
+            if (!url) {
+                showNotification('请先输入网页地址', 'error');
+                return;
             }
+            if (!code) {
+                showNotification('请先输入访问验证码', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('detectBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const response = await fetch(`/detect?url=${encodeURIComponent(url)}&code=${encodeURIComponent(code)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    showNotification('识别失败: ' + data.error, 'error');
+                } else {
+                    if (data.a) document.getElementById('a').value = data.a;
+                    if (data.t) document.getElementById('t').value = data.t;
+                    if (data.attr) document.getElementById('attr').value = data.attr;
+                    showNotification(data.message || '识别成功！', 'success');
+                }
+            } catch (err) {
+                showNotification('网络错误，请稍后重试', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        async function testRss() {
+            if (!document.getElementById('url').value) {
+                showNotification('请先输入网页地址', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('testBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>处理中...';
+
+            try {
+                const encoded = getEncodedParams();
+                const response = await fetch(`/html2rss?p=${encoded}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || '测试失败');
+                }
+                
+                const xml = await response.text();
+                const previewArea = document.getElementById('previewArea');
+                const xmlPreview = document.getElementById('xmlPreview');
+                
+                xmlPreview.innerHTML = highlightXml(formatXml(xml));
+                previewArea.classList.remove('hidden');
+                setTimeout(() => previewArea.scrollIntoView({ behavior: 'smooth' }), 100);
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        function generateRss(e) {
+            e.preventDefault();
+            
+            const encoded = getEncodedParams();
+            const baseUrl = window.location.origin + window.location.pathname.replace('index.html', '').replace(/\/$/, '');
+            const rssUrl = `${baseUrl}/html2rss?p=${encoded}`;
+            
+            const resultArea = document.getElementById('resultArea');
+            document.getElementById('rssResult').value = rssUrl;
+            
+            resultArea.classList.remove('hidden');
+            setTimeout(() => resultArea.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+
+        function showNotification(msg, type = 'success') {
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-indigo-600' : 'bg-rose-600';
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            
+            toast.className = `fixed top-6 right-6 ${bgColor} text-white px-6 py-4 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 animate-[slideIn_0.3s_ease-out]`;
+            toast.innerHTML = `<i class="fas ${icon} text-xl"></i><span class="font-bold">${msg}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('animate-[fadeOut_0.3s_ease-in]');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function formatXml(xml) {
+            let formatted = '';
+            let indent = '';
+            const tab = '  ';
+            xml.split(/>\s*</).forEach(node => {
+                if (node.match(/^\/\w/)) indent = indent.substring(tab.length);
+                formatted += indent + '<' + node + '>\n';
+                if (node.match(/^<?\w[^>]*[^\/]$/) && !node.match(/^meta/)) indent += tab;
+            });
+            return formatted.substring(1, formatted.length - 3);
+        }
+
+        function highlightXml(xml) {
+            return xml
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/(&lt;\[CDATA\[[\s\S]*?\]\]&gt;)/g, '<span class="xml-cdata">$1</span>')
+                .replace(/(&lt;\/?[a-zA-Z0-9:]+)/g, '<span class="xml-tag">$1</span>')
+                .replace(/(&gt;)/g, '<span class="xml-tag">$1</span>')
+                .replace(/\s([a-zA-Z0-9:]+)=/g, ' <span class="xml-attr">$1</span>=')
+                .replace(/"([^"]*)"/g, '<span class="xml-string">"$1"</span>');
+        }
+
+        async function copyToClipboard() {
+            const copyText = document.getElementById("rssResult");
+            try {
+                await navigator.clipboard.writeText(copyText.value);
+                const btn = document.getElementById('copyBtn');
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> <span>已复制</span>';
+                btn.classList.replace('bg-emerald-600', 'bg-indigo-600');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.classList.replace('bg-indigo-600', 'bg-emerald-600');
+                }, 2000);
+            } catch (err) {
+                showNotification('复制失败，请手动复制', 'error');
+            }
+        }
+
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('code')) document.getElementById('code').value = urlParams.get('code');
         };
     </script>
     <style>
-        /* 通用 Input 样式 */
-        input[type="text"],
-        input[type="password"],
-        input[type="email"],
-        input[type="search"],
-        input[type="number"],
-        input[type="tel"],
-        input[type="url"],
-        textarea,
-        select {
-            appearance: none; /* 重置浏览器默认样式 */
-            box-sizing: border-box;
-            width: 100%; /* 或指定具体宽度 */
-            padding: 10px 12px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background-color: #fff;
-            color: #333;
-            outline: none; /* 移除默认 focus 时的 outline */
-            transition: border-color 0.3s ease; /* 平滑过渡边框颜色 */
-        }
-
-        /* Placeholder 样式 */
-        input::placeholder,
-        textarea::placeholder {
-            color: #999; /* 浅灰色 placeholder */
-            opacity: 1; /* Firefox 需要设置 opacity: 1 */
-        }
-
-        /* Focus 状态样式 */
-        input:focus,
-        textarea:focus,
-        select:focus {
-            border-color: #007bff; /* 焦点时边框颜色 */
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25); /* 可选：添加浅色阴影 */
-        }
-
-        /* Disabled 状态样式 */
-        input:disabled,
-        textarea:disabled,
-        select:disabled {
-            background-color: #f2f2f2;
-            color: #666;
-            border-color: #ddd;
-            cursor: not-allowed; /* 禁用状态光标 */
-        }
-
-        /* 只读 (readonly) 状态样式 (可选) */
-        input[readonly],
-        textarea[readonly] {
-            background-color: #eee;
-            color: #666;
-            border-color: #ddd;
-        }
-
-        /* 特殊类型的 Input 可以单独设置样式，例如 search input */
-        input[type="search"] {
-            /* 可以添加搜索图标等 */
-        }
-
-        /* Textarea 特有样式 */
-        textarea {
-            resize: vertical; /* 允许垂直方向调整大小 */
-            min-height: 100px; /* 设置最小高度 */
-        }
-
-        /* Select 下拉框特有样式 */
-        select {
-            /* 可以自定义下拉箭头，移除默认箭头等 */
-            /* 注意不同浏览器对 select 的样式自定义程度有限 */
-            -webkit-appearance: none; /* 移除 WebKit 浏览器默认箭头 */
-            -moz-appearance: none; /* 移除 Firefox 浏览器默认箭头 */
-            appearance: none; /* 标准语法移除默认箭头 */
-            background-image: url("data:image/svg+xml,..."); /* 自定义下拉箭头图标 (SVG 或 Base64) */
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            padding-right: 30px; /* 预留箭头空间 */
-        }
-
-        /* 移除 IE 和 Edge 浏览器的默认下拉箭头 (如果使用自定义箭头) */
-        select::-ms-expand {
-            display: none;
-        }
-
-        /* 通用 Button 样式 */
-        button,
-        input[type="button"],
-        input[type="submit"],
-        input[type="reset"] {
-            appearance: none; /* 重置浏览器默认样式 */
-            box-sizing: border-box;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            border: none; /* 移除默认边框 */
-            border-radius: 4px;
-            background-color: #007bff; /* 默认背景色 */
-            color: #fff; /* 默认文字颜色 */
-            cursor: pointer;
-            outline: none; /* 移除默认 focus 时的 outline */
-            transition: background-color 0.3s ease, transform 0.2s ease; /* 平滑过渡背景色和形变 */
-        }
-
-        /* Hover 状态样式 */
-        button:hover,
-        input[type="button"]:hover,
-        input[type="submit"]:hover,
-        input[type="reset"]:hover {
-            background-color: #0056b3; /* Hover 时背景色 */
-        }
-
-        /* Focus 状态样式 (可选，根据设计需求决定是否需要) */
-        button:focus,
-        input[type="button"]:focus,
-        input[type="submit"]:focus,
-        input[type="reset"]:focus {
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.5); /* 可选：添加焦点阴影 */
-        }
-
-        /* Active 状态样式 (点击时) */
-        button:active,
-        input[type="button"]:active,
-        input[type="submit"]:active,
-        input[type="reset"]:active {
-            background-color: #004085; /* Active 时背景色 */
-            transform: scale(0.98); /* 可选：轻微缩小，模拟按下效果 */
-        }
-
-        /* Disabled 状态样式 */
-        button:disabled,
-        input[type="button"]:disabled,
-        input[type="submit"]:disabled,
-        input[type="reset"]:disabled {
-            background-color: #ccc;
-            color: #666;
-            cursor: not-allowed;
-        }
-
-        /* 不同类型的 Button 可以单独设置样式，例如 Primary Button, Secondary Button */
-        .button-primary {
-            background-color: #28a745; /* 绿色 Primary Button */
-            color: #fff;
-        }
-
-        .button-primary:hover {
-            background-color: #1e7e34;
-        }
-
-        .button-secondary {
-            background-color: #f8f9fa; /* 浅灰色 Secondary Button */
-            color: #333;
-            border: 1px solid #ccc;
-        }
-
-        .button-secondary:hover {
-            background-color: #e2e6ea;
-        }
-
-        /* 文本按钮 (Link Button) 风格 */
-        .button-link {
-            background-color: transparent;
-            color: #007bff;
-            border: none;
-            padding: 0; /* 移除默认 padding */
-            text-decoration: none; /* 移除默认下划线 (如果有需要) */
-        }
-
-        .button-link:hover {
-            text-decoration: underline; /* Hover 时添加下划线 */
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
-</head>
-<body style="padding: 2em;box-sizing: border-box;">
-<form action="./html2rss" method="GET" onsubmit="return validateForm()">
-    <!-- 表单输入字段 code、t、a、charset、url -->
-    <label for="code">验证码:</label><br>
-    <input style="width: 100%;" type="text" id="code" name="code"><br><br>
-    <label for="t">标题选择器:</label><br>
-    <input style="width: 100%;" type="text" id="t" name="t" placeholder="div.player_list > ul > li"><br><br>
-    <label for="ts">标题排序:</label><br>
-    <select id="ts">
-        <option value="a" selected>升序</option>
-        <option value="d">降序</option>
-    </select><br><br>
-    <label for="a">链接选择器(a[href^=magnet]):</label><br>
-    <input style="width: 100%;" type="text" id="a" name="a" placeholder="a[href^=magnet]"><br><br>
-    <label for="attr">链接属性ATTR(href]):</label><br>
-    <input style="width: 100%;" type="text" id="attr" name="a" placeholder="href"><br><br>
-    <label for="as">链接排序:</label><br>
-    <select id="as">
-        <option value="a" selected>升序</option>
-        <option value="d">降序</option>
-    </select><br><br>
-    <label for="charset">编码:</label><br>
-    <input style="width: 100%;" type="text" id="charset" name="charset" placeholder="UTF-8"><br><br>
-    <label for="url">html地址:</label><br>
-    <input style="width: 100%;" type="text" id="url" name="url"
-           placeholder="网页地址"><br><br>
-    <button class="button-primary" type="submit">生成RSS</button>
-</form>
-<br/>
-<div>
-    <!-- 复制的RSS链接 -->
-    <button class="button-primary" onclick="copyRss()">复制RSS链接</button>
-    <br>
-    <label for="rss">RSS链接:</label><br><textarea id="rss"></textarea>
-</div>
 </body>
 </html>
