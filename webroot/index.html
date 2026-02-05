@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML2RSS - 现代化网页转RSS订阅工具</title>
+    <title>HTML2RSS - 聚合内容 RSS 提取工具</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -27,17 +27,17 @@
         <!-- Header -->
         <div class="text-center mb-10">
             <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-sm mb-4 border border-slate-100">
-                <i class="fas fa-rss text-3xl text-orange-500"></i>
+                <i class="fas fa-rss text-3xl text-indigo-500"></i>
             </div>
             <h1 class="text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">HTML2RSS</h1>
-            <p class="text-slate-500 font-medium">高效、简洁、智能的网页 RSS 提取方案</p>
+            <p class="text-slate-500 font-medium">专业级网页内容聚合与 RSS 转换方案</p>
         </div>
 
         <div class="bg-white shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden border border-slate-200/60 glass-effect">
             <div class="p-6 sm:p-10">
                 <form id="rssForm" onsubmit="return generateRss(event)" class="space-y-8">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                        <!-- Verification Code - Moved to top -->
+                        <!-- Verification Code -->
                         <div class="md:col-span-2">
                             <label class="block text-sm font-bold text-indigo-700 mb-2 ml-1 flex items-center">
                                 <i class="fas fa-shield-halved mr-2"></i>访问验证码 (必填)
@@ -53,13 +53,13 @@
 
                         <!-- URL Input -->
                         <div class="md:col-span-2">
-                            <label class="block text-sm font-bold text-slate-700 mb-2 ml-1">网页地址 (URL)</label>
+                            <label class="block text-sm font-bold text-slate-700 mb-2 ml-1">目标地址 (URL)</label>
                             <div class="flex space-x-3">
                                 <div class="relative flex-grow">
                                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <i class="fas fa-link text-slate-400"></i>
                                     </div>
-                                    <input type="url" id="url" required placeholder="https://example.com/movies" 
+                                    <input type="url" id="url" required placeholder="https://example.com/articles" 
                                         class="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
                                 </div>
                                 <button type="button" onclick="autoDetect()" id="detectBtn"
@@ -72,56 +72,62 @@
 
                         <!-- Selectors -->
                         <div class="space-y-2">
-                            <label class="block text-sm font-bold text-slate-700 ml-1">链接选择器 (Required)</label>
-                            <input type="text" id="a" required placeholder="a[href^=magnet]" 
-                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
-                            <p class="text-[11px] text-slate-400 px-1">例如: .movie-list a[href*=torrent]</p>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="block text-sm font-bold text-slate-700 ml-1">标题选择器 (Optional)</label>
-                            <input type="text" id="t" placeholder="div.item > h3" 
-                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
-                            <p class="text-[11px] text-slate-400 px-1">如果不填，则尝试从链接文字提取</p>
-                        </div>
-
-                        <!-- Attributes & Charset -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-bold text-slate-700 ml-1">链接属性</label>
-                            <input type="text" id="attr" placeholder="href" 
-                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                            <label class="block text-sm font-bold text-slate-700 ml-1">链接选择器 (必需)</label>
+                            <input type="text" id="a" required placeholder="CSS Selector" 
+                                class="block w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
                         </div>
                         <div class="space-y-2">
                             <label class="block text-sm font-bold text-slate-700 ml-1">网页编码</label>
                             <input type="text" id="charset" placeholder="auto" value="auto"
-                                class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
-                        </div>
-
-                        <!-- Sorting -->
-                        <div class="space-y-2">
-                            <label class="block text-sm font-bold text-slate-700 ml-1">标题排序</label>
-                            <select id="ts" class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer transition-all shadow-sm">
-                                <option value="a">升序 (正序)</option>
-                                <option value="d">降序 (倒序)</option>
-                            </select>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="block text-sm font-bold text-slate-700 ml-1">链接排序</label>
-                            <select id="as" class="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer transition-all shadow-sm">
-                                <option value="a">升序 (正序)</option>
-                                <option value="d">降序 (倒序)</option>
-                            </select>
+                                class="block w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
                         </div>
 
                         <!-- Clean Mode Toggle -->
-                        <div class="md:col-span-2 flex items-center p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                        <div class="md:col-span-2 flex items-center p-5 bg-indigo-50/30 rounded-2xl border border-indigo-100/50">
                             <div class="flex-grow">
-                                <h4 class="text-sm font-bold text-orange-900">纯净阅读模式 (小说/文章推荐)</h4>
-                                <p class="text-xs text-orange-700">启用后，RSS 链接将指向本工具提供的无广告阅读界面</p>
+                                <h4 class="text-sm font-bold text-indigo-900">纯净阅读模式 (推荐)</h4>
+                                <p class="text-xs text-indigo-600 mt-0.5">启用后，RSS 链接将指向本工具提供的无广告沉浸式阅读界面</p>
                             </div>
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" id="clean" class="sr-only peer">
-                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
+                        </div>
+
+                        <!-- Advanced Options Collapsible -->
+                        <div class="md:col-span-2">
+                            <button type="button" onclick="document.getElementById('advancedSection').classList.toggle('hidden')" 
+                                class="flex items-center text-xs font-bold text-slate-400 hover:text-indigo-500 transition-colors uppercase tracking-widest space-x-2 px-1">
+                                <i class="fas fa-cog"></i>
+                                <span>高级选项 / 高度自定义</span>
+                                <i class="fas fa-chevron-down text-[10px]"></i>
+                            </button>
+                            <div id="advancedSection" class="hidden mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase">标题选择器 (Optional)</label>
+                                    <input type="text" id="t" placeholder="例如: .item > h2" 
+                                        class="block w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm text-sm">
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase">链接属性 (Attr)</label>
+                                    <input type="text" id="attr" placeholder="href / data-url" 
+                                        class="block w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm text-sm">
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase">标题排序</label>
+                                    <select id="ts" class="block w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer text-sm">
+                                        <option value="a">升序 (保持原样)</option>
+                                        <option value="d">降序 (反转顺序)</option>
+                                    </select>
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase">链接排序</label>
+                                    <select id="as" class="block w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none cursor-pointer text-sm">
+                                        <option value="a">升序 (保持原样)</option>
+                                        <option value="d">降序 (反转顺序)</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -130,9 +136,9 @@
                             <i class="fas fa-vial"></i>
                             <span>预览测试</span>
                         </button>
-                        <button type="submit" class="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg shadow-orange-200 flex items-center justify-center space-x-2">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg shadow-indigo-200 flex items-center justify-center space-x-2">
                             <i class="fas fa-bolt"></i>
-                            <span>生成最终订阅地址</span>
+                            <span>生成 RSS 链接</span>
                         </button>
                     </div>
                 </form>
@@ -142,7 +148,7 @@
                     <div class="flex items-center justify-between">
                         <h3 class="text-base font-bold text-slate-800 flex items-center">
                             <span class="w-1.5 h-6 bg-indigo-500 rounded-full mr-3"></span>
-                            数据预览 (RSS Items)
+                            数据预览
                         </h3>
                         <button onclick="document.getElementById('previewArea').classList.add('hidden')" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
                             <i class="fas fa-times"></i>
@@ -157,7 +163,7 @@
                 <div id="resultArea" class="mt-12 hidden space-y-4 animate-[slideUp_0.3s_ease-out]">
                     <div class="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-base font-bold text-emerald-900">生成成功！您的订阅链接如下</h3>
+                            <h3 class="text-base font-bold text-emerald-900">生成成功</h3>
                             <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full uppercase tracking-wider">Ready</span>
                         </div>
                         <div class="flex space-x-3">
@@ -168,15 +174,13 @@
                                 <span>复制</span>
                             </button>
                         </div>
-                        <p class="mt-3 text-xs text-emerald-600 font-medium">提示：请将此链接填入 qBittorrent 或其他 RSS 阅读器中。</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="mt-12 text-center text-slate-400 text-sm font-medium">
-            <p>&copy; 2026 HTML2RSS Tools &bull; 精简 &bull; 智能 &bull; 开源</p>
+            <p>&copy; 2026 HTML2RSS Tools &bull; 纯净 &bull; 智能 &bull; 高效</p>
         </div>
     </div>
 
@@ -203,31 +207,19 @@
 
         function getEncodedParams() {
             const params = {};
-            const fields = ['url', 'a', 't', 'code', 'charset', 'ts', 'as', 'attr'];
+            const fields = ['url', 'a', 'code', 'charset', 't', 'attr', 'ts', 'as'];
             fields.forEach(field => {
                 const el = document.getElementById(field);
                 if (el && el.value) params[field] = el.value;
             });
-            
-            // Add clean mode toggle
             params['clean'] = document.getElementById('clean').checked;
-            
-            const jsonStr = JSON.stringify(params);
-            const bigInt = stringToBigInt(jsonStr);
-            return encodeBase62(bigInt);
+            return encodeBase62(stringToBigInt(JSON.stringify(params)));
         }
 
         async function autoDetect() {
             const url = document.getElementById('url').value;
             const code = document.getElementById('code').value;
-            if (!url) {
-                showNotification('请先输入网页地址', 'error');
-                return;
-            }
-            if (!code) {
-                showNotification('请先输入访问验证码', 'error');
-                return;
-            }
+            if (!url || !code) { showNotification('请先输入地址和验证码', 'error'); return; }
 
             const btn = document.getElementById('detectBtn');
             const originalHtml = btn.innerHTML;
@@ -237,7 +229,6 @@
             try {
                 const response = await fetch(`/detect?url=${encodeURIComponent(url)}&code=${encodeURIComponent(code)}`);
                 const data = await response.json();
-
                 if (data.error) {
                     showNotification('识别失败: ' + data.error, 'error');
                 } else {
@@ -247,7 +238,7 @@
                     showNotification(data.message || '识别成功！', 'success');
                 }
             } catch (err) {
-                showNotification('网络错误，请稍后重试', 'error');
+                showNotification('请求失败', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
@@ -255,29 +246,18 @@
         }
 
         async function testRss() {
-            if (!document.getElementById('url').value) {
-                showNotification('请先输入网页地址', 'error');
-                return;
-            }
-
+            if (!document.getElementById('url').value) { showNotification('请先输入网页地址', 'error'); return; }
             const btn = document.getElementById('testBtn');
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>处理中...';
 
             try {
-                const encoded = getEncodedParams();
-                const response = await fetch(`/html2rss?p=${encoded}`);
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || '测试失败');
-                }
-                
+                const response = await fetch(`/html2rss?p=${getEncodedParams()}`);
+                if (!response.ok) throw new Error('测试失败');
                 const xml = await response.text();
                 const previewArea = document.getElementById('previewArea');
-                const xmlPreview = document.getElementById('xmlPreview');
-                
-                xmlPreview.innerHTML = highlightXml(formatXml(xml));
+                document.getElementById('xmlPreview').innerHTML = highlightXml(formatXml(xml));
                 previewArea.classList.remove('hidden');
                 setTimeout(() => previewArea.scrollIntoView({ behavior: 'smooth' }), 100);
             } catch (err) {
@@ -290,49 +270,33 @@
 
         function generateRss(e) {
             e.preventDefault();
-            
-            const encoded = getEncodedParams();
-            const baseUrl = window.location.origin + window.location.pathname.replace('index.html', '').replace(/\/$/, '');
-            const rssUrl = `${baseUrl}/html2rss?p=${encoded}`;
-            
+            const rssUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '').replace(/\/$/, '')}/html2rss?p=${getEncodedParams()}`;
             const resultArea = document.getElementById('resultArea');
             document.getElementById('rssResult').value = rssUrl;
-            
             resultArea.classList.remove('hidden');
             setTimeout(() => resultArea.scrollIntoView({ behavior: 'smooth' }), 100);
         }
 
         function showNotification(msg, type = 'success') {
             const toast = document.createElement('div');
-            const bgColor = type === 'success' ? 'bg-indigo-600' : 'bg-rose-600';
-            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
-            
-            toast.className = `fixed top-6 right-6 ${bgColor} text-white px-6 py-4 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 animate-[slideIn_0.3s_ease-out]`;
-            toast.innerHTML = `<i class="fas ${icon} text-xl"></i><span class="font-bold">${msg}</span>`;
+            toast.className = `fixed top-6 right-6 ${type === 'success' ? 'bg-indigo-600' : 'bg-rose-600'} text-white px-6 py-4 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 animate-[slideIn_0.3s_ease-out]`;
+            toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-xl"></i><span class="font-bold">${msg}</span>`;
             document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.classList.add('animate-[fadeOut_0.3s_ease-in]');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            setTimeout(() => { toast.classList.add('animate-[fadeOut_0.3s_ease-in]'); setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
         function formatXml(xml) {
-            let formatted = '';
-            let indent = '';
-            const tab = '  ';
+            let formatted = ''; let indent = '';
             xml.split(/>\s*</).forEach(node => {
-                if (node.match(/^\/\w/)) indent = indent.substring(tab.length);
+                if (node.match(/^\/\w/)) indent = indent.substring(2);
                 formatted += indent + '<' + node + '>\n';
-                if (node.match(/^<?\w[^>]*[^\/]$/) && !node.match(/^meta/)) indent += tab;
+                if (node.match(/^<?\w[^>]*[^\/]$/) && !node.match(/^meta/)) indent += '  ';
             });
             return formatted.substring(1, formatted.length - 3);
         }
 
         function highlightXml(xml) {
-            return xml
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
+            return xml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/(&lt;\[CDATA\[[\s\S]*?\]\]&gt;)/g, '<span class="xml-cdata">$1</span>')
                 .replace(/(&lt;\/?[a-zA-Z0-9:]+)/g, '<span class="xml-tag">$1</span>')
                 .replace(/(&gt;)/g, '<span class="xml-tag">$1</span>')
@@ -341,21 +305,14 @@
         }
 
         async function copyToClipboard() {
-            const copyText = document.getElementById("rssResult");
             try {
-                await navigator.clipboard.writeText(copyText.value);
+                await navigator.clipboard.writeText(document.getElementById("rssResult").value);
                 const btn = document.getElementById('copyBtn');
                 const originalHtml = btn.innerHTML;
                 btn.innerHTML = '<i class="fas fa-check"></i> <span>已复制</span>';
                 btn.classList.replace('bg-emerald-600', 'bg-indigo-600');
-                
-                setTimeout(() => {
-                    btn.innerHTML = originalHtml;
-                    btn.classList.replace('bg-indigo-600', 'bg-emerald-600');
-                }, 2000);
-            } catch (err) {
-                showNotification('复制失败，请手动复制', 'error');
-            }
+                setTimeout(() => { btn.innerHTML = originalHtml; btn.classList.replace('bg-indigo-600', 'bg-emerald-600'); }, 2000);
+            } catch (err) { showNotification('复制失败', 'error'); }
         }
 
         window.onload = () => {
