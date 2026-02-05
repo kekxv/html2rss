@@ -120,12 +120,31 @@ def clean_content_title(soup: BeautifulSoup, raw_title: str) -> str:
     return title.strip()
 
 async def fetch_html_raw(url: str) -> Tuple[str, bytes]:
+    parsed_url = urllib.parse.urlparse(url)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Referer': base_url,
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
     }
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, headers=headers) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=True, 
+        timeout=30.0, 
+        headers=headers,
+        http2=True
+    ) as client:
         response = await client.get(url)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch {url}: Status {response.status_code}")
