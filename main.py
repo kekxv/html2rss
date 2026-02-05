@@ -3,27 +3,26 @@ import time
 import string
 import json
 import re
-from typing import List, Optional
+import base64
+from typing import List, Optional, Tuple
 import urllib.parse
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response, FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import Response, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
 from bs4 import BeautifulSoup
 import charset_normalizer
+import trafilatura
 
 app = FastAPI()
 
-# Verification code from environment or default
+# Verification code
 VERIFICATION_CODE = "test"
-
-# Base62 character set
 BASE62_ALPHABET = string.digits + string.ascii_letters
 
 def encode_base62(num: int) -> str:
-    if num == 0:
-        return BASE62_ALPHABET[0]
+    if num == 0: return BASE62_ALPHABET[0]
     arr = []
     base = len(BASE62_ALPHABET)
     while num:
@@ -40,19 +39,9 @@ def decode_base62(s: str) -> int:
     return num
 
 def get_short_id(message: str) -> str:
-    """Generate a short, URL-safe Base62 identifier from a string."""
     hash_obj = hashlib.md5(message.encode())
     num = int.from_bytes(hash_obj.digest()[:8], 'big')
     return encode_base62(num)
-
-def extract_magnet_dn(url: str) -> Optional[str]:
-    """从 magnet 链接中提取 dn 参数作为标题"""
-    if not url.startswith("magnet:"):
-        return None
-    match = re.search(r"dn=([^&]+)", url)
-    if match:
-        return urllib.parse.unquote(match.group(1))
-    return None
 
 async def generate_rss(
     title: str,
@@ -101,201 +90,262 @@ async def generate_rss(
   </channel>
 </rss>"""
 
-async def fetch_html(url: str, charset: Optional[str] = None) -> str:
+def url_encode_proxy(url: str) -> str:
+    """Safe Base64 encoding for URLs in proxy links"""
+    return base64.urlsafe_b64encode(url.encode()).decode().rstrip('=')
+
+def url_decode_proxy(encoded: str) -> str:
+    """Safe Base64 decoding for URLs in proxy links"""
+    padding = '=' * (4 - len(encoded) % 4)
+    return base64.urlsafe_b64decode(encoded + padding).decode()
+
+def extract_magnet_dn(url: str) -> Optional[str]:
+    if not url.startswith("magnet:"): return None
+    match = re.search(r"dn=([^&]+)", url)
+    if match: return urllib.parse.unquote(match.group(1))
+    return None
+
+def clean_chapter_title(soup: BeautifulSoup, raw_title: str) -> str:
+    """尝试从网页正文中提取最真实的章节名"""
+    # 优先寻找符合 第x章 格式的标题
+    for tag in ['h1', 'h2', 'strong', 'b']:
+        for el in soup.find_all(tag):
+            text = el.get_text(strip=True)
+            if re.search(r'第.*?[章节节回]', text) and len(text) < 60:
+                return text
+    title = raw_title
+    title = re.split(r'[_|\-–—]', title)[0]
+    title = re.sub(r'(最新章节|全文阅读|小说|在线阅读|无弹窗|目录|正文|第.*?页|[(（]\d+/\d+[)）]).*', '', title)
+    return title.strip()
+
+async def fetch_html_raw(url: str) -> Tuple[str, bytes]:
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {response.status_code}")
-        
-        if charset and charset.lower() not in ["utf-8", "auto"]:
-            try:
-                return response.content.decode(charset, errors='replace')
-            except Exception:
-                pass
-        
+            raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch: {url}")
         results = charset_normalizer.from_bytes(response.content)
-        best_match = results.best()
-        if best_match:
-            return str(best_match)
+        detected = results.best()
+        return (str(detected) if detected else response.content.decode('utf-8', errors='replace')), response.content
+
+def process_novel_content(text: str) -> str:
+    """小说正文深度清洗与格式化"""
+    if not text: return ""
+    
+    # 物理拆分
+    text = re.sub(r'[\t ]{2,}', '\n', text)
+    text = re.sub(r'\|', '\n', text)
+    
+    lines = text.split('\n')
+    clean_lines = []
+    
+    junk_patterns = [
+        r'上一[章页]', r'下一[章页]', r'目[录次]', r'书[架签]', r'加入书', r'推荐本', r'收藏本',
+        r'选择背景', r'选择字体', r'font[a-z0-9]+', r'繁體', r'阅读[器网]', r'投推荐', r'返回',
+        r'快捷键', r'Ctrl', r'所有文字', r'由网友', r'本站立场', r'Copyright', r'All rights',
+        r'read[0-9]*\(\);', r'javascript', r'www\.', r'http', r'\.com', r'\.net', r'温馨提示',
+        r'章节错误', r'点此举报', r'重要声明', r'不得转载', r'飘天', r'笔趣阁', r'顶点', r'小说网'
+    ]
+    
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 2: continue
         
-        return response.text
+        hit_count = sum(1 for p in junk_patterns if re.search(p, line, re.I))
+        if hit_count >= 2: continue
+        if hit_count >= 1 and len(line) < 45: continue
+        if re.search(r'©|20\d{2}', line): continue
+        if re.match(r'^[_\-\s\*]+$', line): continue
+        
+        # 修正中文缩进
+        line = line.replace('　', '').strip()
+        clean_lines.append(f"<p>{line}</p>")
+            
+    return "".join(clean_lines)
+
+@app.get("/read")
+async def read_clean(url: str, code: str):
+    if code != VERIFICATION_CODE:
+        return HTMLResponse("Invalid code", status_code=403)
+    
+    try:
+        # Robust decoding
+        actual_url = url_decode_proxy(url) if not url.startswith("http") else url
+
+        full_body_text = []
+        current_url = actual_url
+        pages_fetched = 0
+        next_chapter_url = None
+        prev_chapter_url = None
+        main_title = ""
+
+        while pages_fetched < 5:
+            html, _ = await fetch_html_raw(current_url)
+            soup = BeautifulSoup(html, 'lxml')
+            
+            if not main_title:
+                main_title = clean_chapter_title(soup, soup.title.string if soup.title else "")
+
+            # Navigation
+            for a in soup.find_all('a'):
+                text = a.get_text(strip=True)
+                href = a.get('href')
+                if not href: continue
+                if any(k in text for k in ['下一章', '下章节']):
+                    next_chapter_url = urllib.parse.urljoin(current_url, href)
+                if any(k in text for k in ['上一章', '上章节']):
+                    prev_chapter_url = urllib.parse.urljoin(current_url, href)
+
+            container = soup.find(id=['content', 'booktxt', 'chaptercontent', 'showtxt', 'nr', 'read-content'])
+            if not container:
+                container = soup.find(class_=['content', 'book-content', 'read-content', 'showtxt'])
+            
+            target = container if container else soup.body if soup.body else soup
+            for junk in target(['script', 'style', 'iframe', 'header', 'footer', 'nav', 'aside', 'button', 'fieldset', 'h1', 'h2']):
+                junk.decompose()
+            
+            full_body_text.append(target.get_text(separator='\n'))
+
+            # Handle subpages
+            has_next_page = False
+            for a in soup.find_all('a'):
+                if any(k in a.get_text() for k in ['下一页', '下一頁']) and len(a.get_text()) < 8:
+                    next_p = urllib.parse.urljoin(current_url, a.get('href'))
+                    if next_p != current_url:
+                        current_url = next_p
+                        has_next_page = True
+                        break
+            if has_next_page: pages_fetched += 1
+            else: break
+
+        final_html = process_novel_content("\n".join(full_body_text))
+
+        def get_read_link(target_url):
+            if not target_url: return "#"
+            return f"/read?url={url_encode_proxy(target_url)}&code={code}"
+
+        html_template = f"""
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <title>{main_title}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+                :root {{ --bg-color: #f4f1ea; --text-color: #2c2c2c; --font-size: 1.25rem; }}
+                body {{ 
+                    background-color: var(--bg-color); color: var(--text-color); 
+                    font-family: "Noto Serif SC", serif; transition: background-color 0.3s, color 0.3s;
+                    -webkit-font-smoothing: antialiased; line-height: 1.8;
+                }}
+                .reader-container {{ max-width: 800px; margin: 0 auto; padding: 2rem 1.25rem 8rem; }}
+                h1 {{ font-size: 1.85rem; font-weight: 700; margin-bottom: 3.5rem; text-align: center; color: #111; line-height: 1.4; }}
+                #content p {{ 
+                    margin-bottom: 1.6rem; line-height: 2.1; text-indent: 2em; 
+                    font-size: var(--font-size); text-align: justify; word-break: break-all;
+                }}
+                .dark-mode {{ --bg-color: #1a1a1a; --text-color: #bcbcbc; }}
+                .dark-mode h1 {{ color: #eee; }}
+                .nav-btn {{ @apply px-4 py-4 rounded-2xl font-bold transition-all flex items-center justify-center space-x-2 text-base bg-black/5 border border-black/5; }}
+                .dark-mode .nav-btn {{ @apply bg-white/5 border-white/5; }}
+            </style>
+        </head>
+        <body class="selection:bg-indigo-200">
+            <div class="reader-container">
+                <h1>{main_title}</h1>
+                <div id="content">{final_html}</div>
+                <div class="mt-20 grid grid-cols-2 gap-4 border-t pt-12 border-gray-300/30">
+                    <a href="{get_read_link(prev_chapter_url)}" class="nav-btn {'opacity-20 pointer-events-none' if not prev_chapter_url else ''}">
+                        <i class="fas fa-arrow-left text-sm"></i> <span>上一章</span>
+                    </a>
+                    <a href="{get_read_link(next_chapter_url)}" class="nav-btn bg-indigo-600 !text-white !border-none shadow-xl shadow-indigo-200">
+                        <span>下一章</span> <i class="fas fa-arrow-right text-sm"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="fixed bottom-8 right-6 flex flex-col space-y-4 z-50">
+                <button onclick="changeFontSize(1)" class="w-12 h-12 rounded-full bg-white shadow-lg border border-gray-100 flex items-center justify-center text-slate-600 active:scale-95"><i class="fas fa-plus"></i></button>
+                <button onclick="changeFontSize(-1)" class="w-12 h-12 rounded-full bg-white shadow-lg border border-gray-100 flex items-center justify-center text-slate-600 active:scale-95"><i class="fas fa-minus"></i></button>
+                <button onclick="toggleDarkMode()" class="w-12 h-12 rounded-full bg-slate-800 text-white shadow-lg flex items-center justify-center active:scale-95"><i class="fas fa-circle-half-stroke"></i></button>
+            </div>
+            <script>
+                let fontSize = parseFloat(localStorage.getItem('readerFontSize') || 1.25);
+                function updateStyle() {{ document.documentElement.style.setProperty('--font-size', fontSize + 'rem'); localStorage.setItem('readerFontSize', fontSize); }}
+                function changeFontSize(delta) {{ fontSize = Math.max(0.85, Math.min(2.5, fontSize + delta * 0.1)); updateStyle(); }}
+                function toggleDarkMode() {{ document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode', document.body.classList.contains('dark-mode')); }}
+                if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
+                updateStyle();
+            </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_template)
+    except Exception as e:
+        return HTMLResponse(f"<div style='padding:2rem;'><h3>解析失败</h3><p>{str(e)}</p></div>", status_code=500)
+
+@app.get("/detect")
+async def detect_rules(url: str = Query(...), code: str = Query(...)):
+    if code != VERIFICATION_CODE: return {"error": "Invalid verification code"}
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = await client.get(url, headers=headers)
+            results = charset_normalizer.from_bytes(response.content)
+            html_content = str(results.best())
+        
+        soup = BeautifulSoup(html_content, 'lxml')
+        magnets = soup.select('a[href^="magnet:"]')
+        if magnets:
+            return {"a": 'a[href^="magnet:"]', "t": "a[href^='magnet:']", "attr": "href", "message": "Found magnet links!"}
+        
+        novel_patterns = [r'第.*章', r'第.*节', r'Chapter', r'分卷', r'番外']
+        all_links = soup.find_all('a', href=True)
+        novel_links = [l for l in all_links if any(re.search(p, l.get_text(strip=True)) for p in novel_patterns)]
+        if len(novel_links) > 5:
+            from collections import Counter
+            parents = Counter()
+            for l in novel_links[:20]:
+                p = l.parent
+                sel = p.name + (f"#{p.get('id')}" if p.get('id') else (f".{'.'.join(p.get('class'))}" if p.get('class') else ""))
+                parents[sel] += 1
+            return {"a": f"{parents.most_common(1)[0][0]} a", "t": f"{parents.most_common(1)[0][0]} a", "attr": "href", "message": "Detected Novel pattern!"}
+        return {"error": "Could not detect patterns."}
+    except Exception as e: return {"error": str(e)}
 
 @app.get("/html2rss")
-async def html2rss(
-    p: Optional[str] = Query(None),
-    url: Optional[str] = Query(None),
-    a: Optional[str] = Query(None),
-    code: Optional[str] = Query(None),
-    t: Optional[str] = Query(None),
-    charset: str = Query("auto"), 
-    ts: str = Query("a"), 
-    as_: str = Query("a", alias="as"),
-    attr: Optional[str] = Query(None)
-):
+async def html2rss(request: Request, p: Optional[str]=None, url: Optional[str]=None, a: Optional[str]=None, code: Optional[str]=None, clean: bool=False):
     if p:
         try:
             num = decode_base62(p)
             byte_len = (num.bit_length() + 7) // 8
-            payload_bytes = num.to_bytes(byte_len, 'big')
-            params = json.loads(payload_bytes.decode('utf-8'))
-            url = params.get('url')
-            a = params.get('a')
-            code = params.get('code')
-            t = params.get('t')
-            charset = params.get('charset', 'auto')
-            ts = params.get('ts', 'a')
-            as_ = params.get('as', 'a')
-            attr = params.get('attr')
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to decode parameters: {str(e)}")
-
-    if not all([url, a, code]):
-        raise HTTPException(status_code=400, detail="Missing required parameters (url, a, code)")
-
-    if code != VERIFICATION_CODE:
-        raise HTTPException(status_code=403, detail="Invalid verification code")
-
+            params = json.loads(num.to_bytes(byte_len, 'big').decode('utf-8'))
+            url=params.get('url'); a=params.get('a'); code=params.get('code'); clean=params.get('clean', False)
+        except: raise HTTPException(status_code=400)
+    if not all([url, a, code]): raise HTTPException(status_code=400)
+    if code != VERIFICATION_CODE: raise HTTPException(status_code=403)
     try:
-        html = await fetch_html(url, charset)
-        soup = BeautifulSoup(html, 'lxml')
-        
-        links = soup.select(a)
-        if not links:
-            raise HTTPException(status_code=400, detail="No links found with the provided selector")
-        
-        titles = []
-        if t:
-            titles = soup.select(t)
-        
-        if not titles or len(titles) != len(links):
-            titles = links
-
-        page_title = soup.title.string if soup.title else url
-        meta_desc = soup.find("meta", attrs={"name": "description"})
-        page_description = meta_desc["content"] if meta_desc and meta_desc.get("content") else ""
-
-        if as_ == 'd':
-            links = links[::-1]
-        if ts == 'd':
-            titles = titles[::-1]
-
-        item_list = []
-        seen_links = set()
-
-        for link_tag, title_tag in zip(links, titles):
-            link_url = link_tag.get(attr or "href")
-            if link_url:
-                if not link_url.startswith(("magnet:", "http:", "https:", "ftp:")):
-                    link_url = urllib.parse.urljoin(url, link_url)
-                
-                if link_url in seen_links:
-                    continue
-                seen_links.add(link_url)
-                
-                # 优化标题提取
-                title_text = title_tag.get_text(strip=True) or link_tag.get_text(strip=True)
-                
-                # 如果标题看起来是一个原始磁力链接，尝试提取 dn 参数
-                if title_text.startswith("magnet:"):
-                    dn = extract_magnet_dn(title_text)
-                    if dn:
-                        title_text = dn
-                
-                # 如果还是没有标题或者是短链接，再次尝试从 link_url 提取
-                if (not title_text or len(title_text) < 2) and link_url.startswith("magnet:"):
-                    dn = extract_magnet_dn(link_url)
-                    if dn:
-                        title_text = dn
-
-                item_list.append({
-                    "title": title_text or "No Title",
-                    "link": link_url
-                })
-
-        rss_content = await generate_rss(page_title, url, page_description, item_list)
-        return Response(content=rss_content, media_type="application/xml")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/detect")
-async def detect_rules(url: str = Query(...), code: str = Query(...)):
-    if code != VERIFICATION_CODE:
-        return {"error": "Invalid verification code"}
-    try:
-        html = await fetch_html(url, "auto")
-        soup = BeautifulSoup(html, 'lxml')
-        
-        # 1. Magnet 检测优化
-        magnets = soup.select('a[href^="magnet:"]')
-        if magnets:
-            sample_magnet = magnets[0]
-            sample_text = sample_magnet.get_text(strip=True)
-            
-            # 如果磁力链接的文字就是链接本身，尝试找同行的其他文字
-            if sample_text.startswith("magnet:") or len(sample_text) < 3:
-                # 尝试找同一个 tr 下的第一个 a 标签
-                parent_tr = sample_magnet.find_parent('tr')
-                if parent_tr and parent_tr.find('a'):
-                    first_a = parent_tr.find('a')
-                    if first_a and first_a != sample_magnet:
-                        return {
-                            "a": 'a[href^="magnet:"]',
-                            "t": "tr a:nth-of-type(1)", # 猜想第一个 a 是标题
-                            "attr": "href",
-                            "message": "Found magnets with distinct titles in table!"
-                        }
-            
-            return {
-                "a": 'a[href^="magnet:"]',
-                "t": "a[href^='magnet:']", # 兜底，解析逻辑会处理 dn
-                "attr": "href",
-                "message": "Found magnet links!"
-            }
-
-        # 2. 通用检测
-        all_links = soup.find_all('a', href=True)
-        content_links = [l for l in all_links if len(l.get_text(strip=True)) > 5 and l['href'].startswith(('http', '/'))]
-        if content_links:
-            from collections import Counter
-            parents = Counter()
-            for l in content_links[:10]:
-                p = l.parent
-                if p.get('class'):
-                    parents[f"{p.name}.{'.'.join(p.get('class'))}"] += 1
-                else:
-                    parents[p.name] += 1
-            best_parent = parents.most_common(1)[0][0]
-            return {
-                "a": f"{best_parent} a",
-                "t": f"{best_parent} a",
-                "attr": "href",
-                "message": "Detected general list pattern."
-            }
-        return {"error": "Could not detect patterns."}
-    except Exception as e:
-        return {"error": str(e)}
+        html, _ = await fetch_html_raw(url); soup = BeautifulSoup(html, 'lxml'); links = soup.select(a)
+        item_list = []; seen = set(); base_url = str(request.base_url).rstrip('/')
+        for link_tag in links:
+            l_url = urllib.parse.urljoin(url, link_tag.get("href"))
+            if l_url in seen: continue
+            seen.add(l_url); title = link_tag.get_text(strip=True)
+            if l_url.startswith("magnet:"): 
+                dn = extract_magnet_dn(l_url)
+                if dn: title = dn
+            if clean and not l_url.startswith("magnet:"):
+                l_url = f"{base_url}/read?url={url_encode_proxy(l_url)}&code={code}"
+            item_list.append({"title": title, "link": l_url})
+        return Response(content=await generate_rss(soup.title.string if soup.title else url, url, "", item_list), media_type="application/xml")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
-async def read_index():
-    return FileResponse('webroot/index.html')
-
+async def read_index(): return FileResponse('webroot/index.html')
 app.mount("/", StaticFiles(directory="webroot"), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    import argparse
-    import os
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 3000)))
-    parser.add_argument("--verification-code", type=str, default=os.getenv("VERIFICATION_CODE", "test"))
-    args = parser.parse_args()
-    
-    VERIFICATION_CODE = args.verification_code
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="0.0.0.0", port=3000)

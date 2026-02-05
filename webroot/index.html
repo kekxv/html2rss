@@ -111,6 +111,18 @@
                                 <option value="d">降序 (倒序)</option>
                             </select>
                         </div>
+
+                        <!-- Clean Mode Toggle -->
+                        <div class="md:col-span-2 flex items-center p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                            <div class="flex-grow">
+                                <h4 class="text-sm font-bold text-orange-900">纯净阅读模式 (小说/文章推荐)</h4>
+                                <p class="text-xs text-orange-700">启用后，RSS 链接将指向本工具提供的无广告阅读界面</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="clean" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -196,6 +208,9 @@
                 const el = document.getElementById(field);
                 if (el && el.value) params[field] = el.value;
             });
+            
+            // Add clean mode toggle
+            params['clean'] = document.getElementById('clean').checked;
             
             const jsonStr = JSON.stringify(params);
             const bigInt = stringToBigInt(jsonStr);
