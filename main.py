@@ -209,8 +209,11 @@ def process_pure_content(text: str) -> str:
         if hit_count >= 1 and len(line) < 45: continue
         if re.search(r'©|20\d{2}', line): continue
         if re.match(r'^[_\-\s\*]+$', line): continue
-        line = line.replace('　', '').strip()
-        clean_lines.append(f"<p>{line}</p>")
+        
+        # 去除全角空格、&nbsp; 等各种空白字符，并进行规范化
+        line = re.sub(r'[\s\u3000\xa0]+', ' ', line).strip()
+        if line:
+            clean_lines.append(f"<p>{line}</p>")
             
     return "".join(clean_lines)
 
@@ -388,27 +391,34 @@ async def detect_rules(url: str = Query(...), code: str = Query(...), charset: O
             if any(re.search(p, text, re.I) for p in content_patterns):
                 novel_links.append(l)
         
-        if len(novel_links) > 1:
-            from collections import Counter
-            parents = Counter()
-            for l in novel_links[:20]:
-                p = l.parent
-                if not p: continue
-                classes = p.get('class')
-                class_str = f".{'.'.join(classes)}" if classes else ""
-                id_str = f"#{p.get('id')}" if p.get('id') else ""
-                sel = p.name + id_str + class_str
-                parents[sel] += 1
-            
-            best_parent = parents.most_common(1)[0][0]
-            return {
-                "a": f"{best_parent} a", 
-                "t": f"{best_parent} a", 
-                "attr": "href", 
-                "message": f"Detected pattern with {len(novel_links)} items."
-            }
-            
-        return {"error": "Could not detect patterns. Found " + str(len(all_links)) + " total links, but none match content patterns."}
+                if len(novel_links) > 1:
+                    from collections import Counter
+                    parents = Counter()
+                    # 增加检查范围，以便在大型列表中更准确地识别容器
+                    for l in novel_links[:100]: 
+                        p = l.parent
+                        if not p: continue
+                        # 尝试向上寻找 2 层父级，寻找具有特定类名或 ID 的容器
+                        # 或者直接使用父级
+                        classes = p.get('class')
+                        class_str = f".{'.'.join(classes)}" if classes else ""
+                        id_str = f"#{p.get('id')}" if p.get('id') else ""
+                        sel = p.name + id_str + class_str
+                        parents[sel] += 1
+                    
+                    best_parent = parents.most_common(1)[0][0]
+                    # 如果最常见的父级包含项太少，尝试使用不带特定类的通用选择器
+                    if parents.most_common(1)[0][1] < 5 and len(novel_links) > 20:
+                         best_parent = "a" # 降级为全局 a 标签匹配，由 novel 模式过滤
+                    
+                    return {
+                        "a": f"{best_parent} a" if best_parent != "a" else "a", 
+                        "t": f"{best_parent} a" if best_parent != "a" else "a", 
+                        "attr": "href", 
+                        "novel": True,
+                        "message": f"Detected novel pattern with {len(novel_links)} items."
+                    }
+                return {"error": "Could not detect patterns. Found " + str(len(all_links)) + " total links, but none match content patterns."}
     except HTTPException as e:
         return {"error": f"HTTP {e.status_code}: {e.detail}"}
     except Exception as e: 
@@ -461,6 +471,11 @@ def format_episode_title(title: str, season: Optional[int]) -> str:
             pass
     return title
 
+def natural_sort_key(text: str) -> list:
+    # 去除所有空白字符后再进行分块，确保排序不受空格干扰
+    clean_text = re.sub(r'[\s\u3000\xa0]+', '', text)
+    return [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', clean_text) if c]
+
 @app.get("/html2rss")
 async def html2rss(
     request: Request, 
@@ -474,7 +489,8 @@ async def html2rss(
     as_: str="a",
     charset: str="auto",
     clean: bool=False,
-    season: Optional[int]=None
+    season: Optional[int]=None,
+    novel: bool=False
 ):
     if p:
         try:
@@ -491,6 +507,7 @@ async def html2rss(
             charset = params.get('charset', 'auto')
             clean = params.get('clean', False)
             season = params.get('season', season)
+            novel = params.get('novel', False)
         except: raise HTTPException(status_code=400, detail="Parameter decoding failed")
     
     if not all([url, a, code]): raise HTTPException(status_code=400, detail="Missing essential params")
@@ -499,13 +516,24 @@ async def html2rss(
     try:
         html, _ = await fetch_html_raw(url, charset=charset)
         soup = BeautifulSoup(html, 'lxml')
-        links = soup.select(a)
+        
+        # 支持逗号分隔的多选择器
+        all_a_selectors = [sel.strip() for sel in a.split(',')]
+        links = []
+        for sel in all_a_selectors:
+            links.extend(soup.select(sel))
+            
         if not links: raise HTTPException(status_code=400, detail="No links found")
         
-        titles = soup.select(t) if t else []
+        titles = []
+        if t:
+            all_t_selectors = [sel.strip() for sel in t.split(',')]
+            for sel in all_t_selectors:
+                titles.extend(soup.select(sel))
+        
         if not titles or len(titles) != len(links): titles = links
 
-        # Sorting
+        # Basic Sorting
         if as_ == 'd': links = links[::-1]
         if ts == 'd': titles = titles[::-1]
 
@@ -527,12 +555,26 @@ async def html2rss(
                 continue
             
             if l_url in seen: continue
-            seen.add(l_url)
             
             # 容错：标题提取逻辑增强
             title = title_tag.get_text(strip=True)
             if not title:
                 title = title_tag.get("title") or title_tag.get("alt") or "无标题"
+            
+            # 小说模式过滤与去空格
+            if novel:
+                # 匹配“第xx章/节/回/集/话/卷”或“Chapter xx”或“数字. ”开头等模式
+                if not re.search(r'第.*?[章节节回集话卷]|Chapter\s*\d+|^\d+[\s\.]+', title, re.I):
+                    continue
+                # 小说模式下先去除标题中的各种空白字符
+                title = re.sub(r'[\s\u3000\xa0]+', '', title)
+                # 在章节关键字（第...章/节/回/集/话/卷）后面加一个空格，增加可读性
+                title = re.sub(r'(第.*?[章节节回集话卷])', r'\1 ', title)
+                # 处理 Chapter 格式
+                title = re.sub(r'(Chapter\d+)', r'\1 ', title, flags=re.I)
+                title = title.strip()
+
+            seen.add(l_url)
             
             if l_url.startswith("magnet:"): 
                 dn = extract_magnet_dn(l_url)
@@ -545,6 +587,10 @@ async def html2rss(
                 l_url = f"{base_url}/read?url={url_encode_proxy(l_url)}&code={code}"
             
             item_list.append({"title": title, "link": l_url})
+        
+        if novel:
+            # 小说模式下，按照章节标题进行自然排序（降序，即最新章节在前）
+            item_list.sort(key=lambda x: natural_sort_key(x['title']), reverse=True)
             
         rss_content = await generate_rss(soup.title.string if soup.title else url, url, "", item_list)
         return Response(content=rss_content.encode('utf-8'), media_type="application/xml; charset=utf-8")

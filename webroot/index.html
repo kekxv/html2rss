@@ -99,6 +99,21 @@
                             </div>
                         </div>
 
+                        <!-- Novel Mode -->
+                        <div class="md:col-span-2 flex items-center p-5 bg-amber-50/30 rounded-2xl border border-amber-100/50">
+                            <div class="flex-grow">
+                                <div class="flex items-center space-x-2 text-amber-700 mb-1">
+                                    <i class="fas fa-book text-sm"></i>
+                                    <h4 class="text-sm font-bold">小说模式</h4>
+                                </div>
+                                <p class="text-xs text-amber-600 mt-0.5">启用后将自动过滤非章节链接，并按照章节序号进行自然排序（降序）</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="novel" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                            </label>
+                        </div>
+
                         <!-- Clean Mode Toggle -->
                         <div class="md:col-span-2 flex items-center p-5 bg-indigo-50/30 rounded-2xl border border-indigo-100/50">
                             <div class="flex-grow">
@@ -230,6 +245,7 @@
                 if (el && el.value) params[field] = el.value;
             });
             params['clean'] = document.getElementById('clean').checked;
+            params['novel'] = document.getElementById('novel').checked;
             return encodeBase62(stringToBigInt(JSON.stringify(params)));
         }
 
@@ -252,6 +268,7 @@
                     if (data.a) document.getElementById('a').value = data.a;
                     if (data.t) document.getElementById('t').value = data.t;
                     if (data.attr) document.getElementById('attr').value = data.attr;
+                    if (data.novel) document.getElementById('novel').checked = true;
                     showNotification(data.message || '识别成功！', 'success');
                 }
             } catch (err) {
