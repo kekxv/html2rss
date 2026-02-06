@@ -69,6 +69,9 @@ async def generate_rss(
       <guid isPermaLink="false">{item_guid}</guid>
       <pubDate>{date}</pubDate>
       <enclosure url="{enclosure_url}" type="application/x-bittorrent"/>
+      <torrent xmlns="https://mikanani.me/0.1/">
+        <link><![CDATA[{item_link}]]></link>
+      </torrent>
       <description><![CDATA[{item_title or description}]]></description>
     </item>""")
         else:
@@ -82,7 +85,7 @@ async def generate_rss(
     </item>""")
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:torrent="https://mikanani.me/0.1/">
   <channel>
     <title><![CDATA[{title}]]></title>
     <link>{link}</link>
@@ -384,6 +387,28 @@ async def detect_rules(url: str = Query(...), code: str = Query(...)):
     except Exception as e: 
         return {"error": str(e)}
 
+def format_episode_title(title: str, season: Optional[int]) -> str:
+    if season is None: return title
+    
+    # 匹配数字，支持如 "13", "第13集", "13.mp4" 等格式
+    # 优先匹配带“第”或“集/话”的，如果没有则匹配末尾或空格后的纯数字
+    match = re.search(r'(?:第\s*)?(\d+)\s*(?:集|话|期|P)', title)
+    if not match:
+        match = re.search(r'(?:^|\s+|_)(\d+)(?:\.|\s+|$)', title)
+        
+    if match:
+        ep_num = int(match.group(1))
+        s_str = f"S{season:02d}E{ep_num:02d}"
+        
+        # 如果标题中已经有匹配到的数字，尝试替换它
+        # 否则直接在合适位置插入
+        full_match = match.group(0)
+        if full_match in title:
+            return title.replace(full_match, f" {s_str} ", 1).replace("  ", " ").strip()
+        else:
+            return f"{title} {s_str}"
+    return title
+
 @app.get("/html2rss")
 async def html2rss(
     request: Request, 
@@ -396,7 +421,8 @@ async def html2rss(
     ts: str="a",
     as_: str="a",
     charset: str="auto",
-    clean: bool=False
+    clean: bool=False,
+    season: Optional[int]=None
 ):
     if p:
         try:
@@ -412,6 +438,7 @@ async def html2rss(
             as_ = params.get('as', 'a')
             charset = params.get('charset', 'auto')
             clean = params.get('clean', False)
+            season = params.get('season', season)
         except: raise HTTPException(status_code=400, detail="Parameter decoding failed")
     
     if not all([url, a, code]): raise HTTPException(status_code=400, detail="Missing essential params")
@@ -446,6 +473,9 @@ async def html2rss(
             if l_url.startswith("magnet:"): 
                 dn = extract_magnet_dn(l_url)
                 if dn: title = dn
+            
+            if season is not None:
+                title = format_episode_title(title, int(season))
             
             if clean and not l_url.startswith("magnet:"):
                 l_url = f"{base_url}/read?url={url_encode_proxy(l_url)}&code={code}"
