@@ -73,13 +73,30 @@
                         <!-- Selectors -->
                         <div class="space-y-2">
                             <label class="block text-sm font-bold text-slate-700 ml-1">链接选择器 (必需)</label>
-                            <input type="text" id="a" required placeholder="CSS Selector" 
+                            <input type="text" id="a" required placeholder="CSS Selector (例如: a.title)" 
                                 class="block w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
                         </div>
                         <div class="space-y-2">
                             <label class="block text-sm font-bold text-slate-700 ml-1">网页编码</label>
                             <input type="text" id="charset" placeholder="auto" value="auto"
                                 class="block w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all shadow-sm">
+                        </div>
+
+                        <!-- Anime / Season Mode -->
+                        <div class="md:col-span-2 p-5 bg-rose-50/50 rounded-2xl border border-rose-100 flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
+                            <div class="flex-grow">
+                                <div class="flex items-center space-x-2 text-rose-700 mb-1">
+                                    <i class="fas fa-film text-sm"></i>
+                                    <h4 class="text-sm font-bold">番剧 / 剧集模式</h4>
+                                </div>
+                                <p class="text-xs text-rose-600/80">启用后将自动识别集数并转换为 S01E01 格式，兼容 Mikanani RSS 规范</p>
+                            </div>
+                            <div class="flex items-center space-x-3 min-w-[140px]">
+                                <span class="text-xs font-bold text-rose-700 uppercase">第</span>
+                                <input type="number" id="season" min="1" placeholder="季" 
+                                    class="w-20 px-3 py-2 bg-white border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all text-center font-bold text-rose-700">
+                                <span class="text-xs font-bold text-rose-700 uppercase">季</span>
+                            </div>
                         </div>
 
                         <!-- Clean Mode Toggle -->
@@ -207,7 +224,7 @@
 
         function getEncodedParams() {
             const params = {};
-            const fields = ['url', 'a', 'code', 'charset', 't', 'attr', 'ts', 'as'];
+            const fields = ['url', 'a', 'code', 'charset', 't', 'attr', 'ts', 'as', 'season'];
             fields.forEach(field => {
                 const el = document.getElementById(field);
                 if (el && el.value) params[field] = el.value;
@@ -286,13 +303,24 @@
         }
 
         function formatXml(xml) {
-            let formatted = ''; let indent = '';
-            xml.split(/>\s*</).forEach(node => {
-                if (node.match(/^\/\w/)) indent = indent.substring(2);
-                formatted += indent + '<' + node + '>\n';
-                if (node.match(/^<?\w[^>]*[^\/]$/) && !node.match(/^meta/)) indent += '  ';
+            let formatted = '';
+            let indent = '';
+            const nodes = xml.split(/>\s*</);
+            
+            nodes.forEach((node, index) => {
+                if (node.match(/^\/\w/)) {
+                    indent = indent.substring(2);
+                }
+                
+                let line = indent + (index === 0 ? '' : '<') + node + (index === nodes.length - 1 ? '' : '>') + '\n';
+                formatted += line;
+
+                // If opening tag and not self-closing
+                if (node.match(/^<?\w[^>]*[^\/]$/) && !node.match(/^meta/)) {
+                    indent += '  ';
+                }
             });
-            return formatted.substring(1, formatted.length - 3);
+            return formatted.trim();
         }
 
         function highlightXml(xml) {

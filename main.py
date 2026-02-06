@@ -6,6 +6,7 @@ import json
 import re
 import base64
 import os
+import asyncio
 from typing import List, Optional, Tuple
 import urllib.parse
 
@@ -123,7 +124,7 @@ def clean_content_title(soup: BeautifulSoup, raw_title: str) -> str:
     title = re.sub(r'(最新章节|全文阅读|小说|在线阅读|无弹窗|目录|正文|第.*?页|[(（]\d+/\d+[)）]).*', '', title)
     return title.strip()
 
-async def fetch_html_raw(url: str) -> Tuple[str, bytes]:
+async def fetch_html_raw(url: str, charset: Optional[str] = None) -> Tuple[str, bytes]:
     parsed_url = urllib.parse.urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
     
@@ -131,39 +132,58 @@ async def fetch_html_raw(url: str) -> Tuple[str, bytes]:
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Referer': base_url,
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
     }
-    async with httpx.AsyncClient(
-        follow_redirects=True, 
-        timeout=30.0, 
-        headers=headers,
-        http2=True
-    ) as client:
-        response = await client.get(url)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch {url}: Status {response.status_code}")
-        
-        results = charset_normalizer.from_bytes(response.content)
-        detected = results.best()
-        if detected and detected.encoding:
-            try:
-                html = response.content.decode(detected.encoding, errors='replace')
-            except:
-                html = response.content.decode('utf-8', errors='replace')
-        else:
-            html = response.content.decode('utf-8', errors='replace')
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=True, 
+                timeout=30.0, 
+                headers=headers,
+                http2=True
+            ) as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    last_error = f"Status {response.status_code}"
+                    await asyncio.sleep(1)
+                    continue
+                
+                content = response.content
+                
+                # 1. 优先使用用户手动指定的编码
+                if charset and charset.lower() != "auto":
+                    try:
+                        return content.decode(charset, errors="replace"), content
+                    except: pass
+
+                # 2. 自动识别：不依赖 header，直接尝试
+                html_text = None
+                
+                # 尝试 A: 使用 charset_normalizer
+                try:
+                    detection = charset_normalizer.from_bytes(content).best()
+                    if detection and detection.confidence > 0.8:
+                        html_text = content.decode(detection.encoding, errors="replace")
+                except: pass
+
+                # 尝试 B: 如果 A 没把握，暴力尝试 GB18030 (兼容 GBK/GB2312)
+                if not html_text:
+                    try:
+                        # GB18030 是最全的中文编码集
+                        html_text = content.decode("gb18030")
+                    except:
+                        # 尝试 C: 最后的退路 UTF-8
+                        html_text = content.decode("utf-8", errors="replace")
+                    
+                return html_text, content
+        except Exception as e:
+            last_error = str(e)
+            await asyncio.sleep(1)
             
-        return html, response.content
+    raise HTTPException(status_code=500, detail=f"Failed to fetch {url} after 3 attempts: {last_error}")
 
 def process_pure_content(text: str) -> str:
     """通用正文清洗与分段"""
@@ -340,30 +360,40 @@ async def read_clean(url: str, code: str):
         return HTMLResponse(f"<div style='padding:2rem;'><h3>解析失败</h3><p>{str(e)}</p></div>", status_code=500)
 
 @app.get("/detect")
-async def detect_rules(url: str = Query(...), code: str = Query(...)):
+async def detect_rules(url: str = Query(...), code: str = Query(...), charset: Optional[str] = None):
     if code != VERIFICATION_CODE: return {"error": "Invalid verification code"}
     try:
-        html_content, _ = await fetch_html_raw(url)
+        html_content, _ = await fetch_html_raw(url, charset=charset)
         soup = BeautifulSoup(html_content, 'lxml')
+        all_links = soup.find_all('a', href=True)
+        
+        # Fallback to html.parser
+        if not all_links:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            all_links = soup.find_all('a', href=True)
+
+        if not all_links:
+            print(f"DEBUG: No links found for {url}. Length: {len(html_content)}. Snippet: {html_content[:500]}")
+            return {"error": "No links found on the page. Site might be blocking requests or requires JavaScript."}
+
         magnets = soup.select('a[href^="magnet:"]')
         if magnets:
             return {"a": 'a[href^="magnet:"]', "t": "a[href^='magnet:']", "attr": "href", "message": "Detected media links."}
         
-        novel_patterns = [r'第.*?[章节节回]', r'Chapter', r'分卷', r'番外', r'正文']
-        all_links = soup.find_all('a', href=True)
+        # 增加更多常见的资源类关键词
+        content_patterns = [r'第.*?[章节节回]', r'Chapter', r'分卷', r'番外', r'正文', r'BD', r'HD', r'720p', r'1080p', r'迅雷下载', r'磁力下载']
         novel_links = []
         for l in all_links:
             text = l.get_text(strip=True)
-            if any(re.search(p, text) for p in novel_patterns):
+            if any(re.search(p, text, re.I) for p in content_patterns):
                 novel_links.append(l)
         
-        if len(novel_links) > 2: # 降低阈值，2个以上就开始尝试识别
+        if len(novel_links) > 1:
             from collections import Counter
             parents = Counter()
             for l in novel_links[:20]:
                 p = l.parent
                 if not p: continue
-                # 尝试构建更准确的选择器
                 classes = p.get('class')
                 class_str = f".{'.'.join(classes)}" if classes else ""
                 id_str = f"#{p.get('id')}" if p.get('id') else ""
@@ -377,11 +407,8 @@ async def detect_rules(url: str = Query(...), code: str = Query(...)):
                 "attr": "href", 
                 "message": f"Detected pattern with {len(novel_links)} items."
             }
-        
-        if not all_links:
-            return {"error": "No links found on the page. Site might be blocking requests or requires JavaScript."}
             
-        return {"error": "Could not detect patterns. Found " + str(len(novel_links)) + " content-like links."}
+        return {"error": "Could not detect patterns. Found " + str(len(all_links)) + " total links, but none match content patterns."}
     except HTTPException as e:
         return {"error": f"HTTP {e.status_code}: {e.detail}"}
     except Exception as e: 
@@ -390,23 +417,46 @@ async def detect_rules(url: str = Query(...), code: str = Query(...)):
 def format_episode_title(title: str, season: Optional[int]) -> str:
     if season is None: return title
     
-    # 匹配数字，支持如 "13", "第13集", "13.mp4" 等格式
-    # 优先匹配带“第”或“集/话”的，如果没有则匹配末尾或空格后的纯数字
-    match = re.search(r'(?:第\s*)?(\d+)\s*(?:集|话|期|P)', title)
+    # 更激进地匹配集数：支持 "13", "第13集", "13.mp4", " - 13", "[13]"
+    # 1. 匹配“第xx集/话/P”
+    match = re.search(r'第\s*(\d+)\s*[集话期P]', title)
+    
+    # 2. 匹配被空格、中划线、方括号包裹的数字，或文件名结尾前的数字
     if not match:
-        match = re.search(r'(?:^|\s+|_)(\d+)(?:\.|\s+|$)', title)
+        # 匹配如 " - 13", "[13]", " 13 ", "_13_", "13.mp4"
+        match = re.search(r'(?:[\s\-\[\]\(_]|^)(\d+)(?:[\s\-\[\]\)_]|$|\.[a-z0-9]{2,4})', title, re.I)
+    
+    # 3. 实在不行，匹配末尾的数字（可能是集数）
+    if not match:
+        match = re.search(r'(\d+)(?:\.[a-z0-9]{2,4})?$', title, re.I)
         
     if match:
-        ep_num = int(match.group(1))
-        s_str = f"S{season:02d}E{ep_num:02d}"
-        
-        # 如果标题中已经有匹配到的数字，尝试替换它
-        # 否则直接在合适位置插入
-        full_match = match.group(0)
-        if full_match in title:
-            return title.replace(full_match, f" {s_str} ", 1).replace("  ", " ").strip()
-        else:
-            return f"{title} {s_str}"
+        try:
+            ep_num = int(match.group(1))
+            s_str = f"S{int(season):02d}E{ep_num:02d}"
+            
+            # 替换原始匹配到的数字部分
+            original_part = match.group(1)
+            # 找到数字在标题中的位置并替换，只替换一次
+            # 注意：这里只替换数字本身，保留周围的装饰符（如“第”和“集”）可能会冗余，
+            # 所以如果匹配到了“第xx集”，我们倾向于整体替换。
+            full_match = match.group(0)
+            
+            # 如果是“第13集”这种格式，直接替换整个“第13集”为“ S01E13 ”
+            if "第" in full_match or any(k in full_match for k in ["集", "话", "P"]):
+                new_title = title.replace(full_match, f" {s_str} ")
+            else:
+                # 否则只替换数字部分，但为了安全，在数字两边加空格
+                # 找到数字的起始位置
+                start_idx = title.find(original_part, match.start())
+                if start_idx != -1:
+                    new_title = title[:start_idx] + s_str + title[start_idx+len(original_part):]
+                else:
+                    new_title = f"{title} {s_str}"
+            
+            return re.sub(r'\s+', ' ', new_title).strip()
+        except:
+            pass
     return title
 
 @app.get("/html2rss")
@@ -445,7 +495,7 @@ async def html2rss(
     if code != VERIFICATION_CODE: raise HTTPException(status_code=403)
     
     try:
-        html, _ = await fetch_html_raw(url)
+        html, _ = await fetch_html_raw(url, charset=charset)
         soup = BeautifulSoup(html, 'lxml')
         links = soup.select(a)
         if not links: raise HTTPException(status_code=400, detail="No links found")
@@ -459,17 +509,29 @@ async def html2rss(
 
         item_list = []; seen = set(); base_url = str(request.base_url).rstrip('/')
         for link_tag, title_tag in zip(links, titles):
-            raw_href = link_tag.get(attr or "href")
+            # 容错：尝试多个可能的属性
+            raw_href = None
+            for attr_name in [attr or "href", "data-href", "data-url", "original-href"]:
+                raw_href = link_tag.get(attr_name)
+                if raw_href: break
+            
             if not raw_href: continue
             
-            # 彻底清洗 URL 中的首尾空格及中间的换行
-            l_url = urllib.parse.urljoin(url, raw_href.strip())
-            l_url = re.sub(r'[\r\n\t]+', '', l_url)
+            try:
+                # 彻底清洗 URL 中的首尾空格及中间的换行
+                l_url = urllib.parse.urljoin(url, raw_href.strip())
+                l_url = re.sub(r'[\r\n\t]+', '', l_url)
+            except Exception:
+                continue
             
             if l_url in seen: continue
             seen.add(l_url)
             
+            # 容错：标题提取逻辑增强
             title = title_tag.get_text(strip=True)
+            if not title:
+                title = title_tag.get("title") or title_tag.get("alt") or "无标题"
+            
             if l_url.startswith("magnet:"): 
                 dn = extract_magnet_dn(l_url)
                 if dn: title = dn
@@ -482,7 +544,8 @@ async def html2rss(
             
             item_list.append({"title": title, "link": l_url})
             
-        return Response(content=await generate_rss(soup.title.string if soup.title else url, url, "", item_list), media_type="application/xml")
+        rss_content = await generate_rss(soup.title.string if soup.title else url, url, "", item_list)
+        return Response(content=rss_content.encode('utf-8'), media_type="application/xml; charset=utf-8")
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
