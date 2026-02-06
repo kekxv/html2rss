@@ -384,41 +384,41 @@ async def detect_rules(url: str = Query(...), code: str = Query(...), charset: O
             return {"a": 'a[href^="magnet:"]', "t": "a[href^='magnet:']", "attr": "href", "message": "Detected media links."}
         
         # 增加更多常见的资源类关键词
-        content_patterns = [r'第.*?[章节节回]', r'Chapter', r'分卷', r'番外', r'正文', r'BD', r'HD', r'720p', r'1080p', r'迅雷下载', r'磁力下载']
+        content_patterns = [r'第.*?[章节节回集话卷]', r'Chapter', r'分卷', r'番外', r'正文', r'BD', r'HD', r'720p', r'1080p', r'迅雷下载', r'磁力下载']
         novel_links = []
         for l in all_links:
             text = l.get_text(strip=True)
             if any(re.search(p, text, re.I) for p in content_patterns):
                 novel_links.append(l)
         
-                if len(novel_links) > 1:
-                    from collections import Counter
-                    parents = Counter()
-                    # 增加检查范围，以便在大型列表中更准确地识别容器
-                    for l in novel_links[:100]: 
-                        p = l.parent
-                        if not p: continue
-                        # 尝试向上寻找 2 层父级，寻找具有特定类名或 ID 的容器
-                        # 或者直接使用父级
-                        classes = p.get('class')
-                        class_str = f".{'.'.join(classes)}" if classes else ""
-                        id_str = f"#{p.get('id')}" if p.get('id') else ""
-                        sel = p.name + id_str + class_str
-                        parents[sel] += 1
-                    
-                    best_parent = parents.most_common(1)[0][0]
-                    # 如果最常见的父级包含项太少，尝试使用不带特定类的通用选择器
-                    if parents.most_common(1)[0][1] < 5 and len(novel_links) > 20:
-                         best_parent = "a" # 降级为全局 a 标签匹配，由 novel 模式过滤
-                    
-                    return {
-                        "a": f"{best_parent} a" if best_parent != "a" else "a", 
-                        "t": f"{best_parent} a" if best_parent != "a" else "a", 
-                        "attr": "href", 
-                        "novel": True,
-                        "message": f"Detected novel pattern with {len(novel_links)} items."
-                    }
-                return {"error": "Could not detect patterns. Found " + str(len(all_links)) + " total links, but none match content patterns."}
+        if len(novel_links) > 1:
+            from collections import Counter
+            parents = Counter()
+            # 增加检查范围，以便在大型列表中更准确地识别容器
+            for l in novel_links[:100]: 
+                p = l.parent
+                if not p: continue
+                # 获取父级标签名及其 class/id
+                classes = p.get('class')
+                class_str = f".{'.'.join(classes)}" if classes else ""
+                id_str = f"#{p.get('id')}" if p.get('id') else ""
+                sel = p.name + id_str + class_str
+                parents[sel] += 1
+            
+            best_parent = parents.most_common(1)[0][0]
+            # 如果最常见的父级包含项太少，尝试使用不带特定类的通用选择器
+            if parents.most_common(1)[0][1] < 5 and len(novel_links) > 20:
+                 best_parent = "a" # 降级为全局 a 标签匹配，由 novel 模式过滤
+            
+            return {
+                "a": f"{best_parent} a" if best_parent != "a" else "a", 
+                "t": f"{best_parent} a" if best_parent != "a" else "a", 
+                "attr": "href", 
+                "novel": True,
+                "message": f"Detected novel pattern with {len(novel_links)} items."
+            }
+            
+        return {"error": "Could not detect patterns. Found " + str(len(all_links)) + " total links, but none match content patterns."}
     except HTTPException as e:
         return {"error": f"HTTP {e.status_code}: {e.detail}"}
     except Exception as e: 
