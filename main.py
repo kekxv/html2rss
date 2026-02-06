@@ -1,3 +1,4 @@
+import html
 import hashlib
 import time
 import string
@@ -60,7 +61,7 @@ async def generate_rss(
         item_guid = get_short_id(item_link)
         
         if item_link.startswith("magnet:"):
-            enclosure_url = item_link.split("&")[0]
+            enclosure_url = html.escape(item_link)
             rss_items.append(f"""
     <item>
       <title><![CDATA[{item_title}]]></title>
@@ -74,7 +75,7 @@ async def generate_rss(
             rss_items.append(f"""
     <item>
       <title><![CDATA[{item_title}]]></title>
-      <link>{item_link}</link>
+      <link><![CDATA[{item_link}]]></link>
       <guid isPermaLink="false">{item_guid}</guid>
       <pubDate>{date}</pubDate>
       <description><![CDATA[{item_title or description}]]></description>
