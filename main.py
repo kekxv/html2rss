@@ -423,37 +423,39 @@ def format_episode_title(title: str, season: Optional[int]) -> str:
     
     # 2. 匹配被空格、中划线、方括号包裹的数字，或文件名结尾前的数字
     if not match:
-        # 匹配如 " - 13", "[13]", " 13 ", "_13_", "13.mp4"
-        match = re.search(r'(?:[\s\-\[\]\(_]|^)(\d+)(?:[\s\-\[\]\)_]|$|\.[a-z0-9]{2,4})', title, re.I)
+        # 匹配如 " - 13", "[13]", " 13 ", "_13_", "06v2.mp4"
+        # 增加了对 v[0-9] 后缀的识别
+        match = re.search(r'(?:[\s\-\[\]\(_]|^)(\d+)(?:v\d+)?(?:[\s\-\[\]\)_]|$|\.[a-z0-9]{2,4})', title, re.I)
     
-    # 3. 实在不行，匹配末尾的数字（可能是集数）
+    # 3. 实在不行，匹配末尾的数字
     if not match:
-        match = re.search(r'(\d+)(?:\.[a-z0-9]{2,4})?$', title, re.I)
+        match = re.search(r'(\d+)(?:v\d+)?(?:\.[a-z0-9]{2,4})?$', title, re.I)
         
     if match:
         try:
             ep_num = int(match.group(1))
             s_str = f"S{int(season):02d}E{ep_num:02d}"
             
-            # 替换原始匹配到的数字部分
-            original_part = match.group(1)
-            # 找到数字在标题中的位置并替换，只替换一次
-            # 注意：这里只替换数字本身，保留周围的装饰符（如“第”和“集”）可能会冗余，
-            # 所以如果匹配到了“第xx集”，我们倾向于整体替换。
-            full_match = match.group(0)
-            
-            # 如果是“第13集”这种格式，直接替换整个“第13集”为“ S01E13 ”
-            if "第" in full_match or any(k in full_match for k in ["集", "话", "P"]):
-                new_title = title.replace(full_match, f" {s_str} ")
-            else:
-                # 否则只替换数字部分，但为了安全，在数字两边加空格
-                # 找到数字的起始位置
-                start_idx = title.find(original_part, match.start())
-                if start_idx != -1:
-                    new_title = title[:start_idx] + s_str + title[start_idx+len(original_part):]
+            # 我们要替换的是包含数字及其可能版本号的整个部分
+            # 但由于 match.group(0) 包含了周围的边界字符，我们需要精确找到要替换的文本
+            # 重新构造一个正则来精确捕获包含数字和可选 v2 的部分
+            replace_match = re.search(r'(\d+)(?:v\d+)?', match.group(0), re.I)
+            if replace_match:
+                to_replace = replace_match.group(0)
+                # 寻找这个片段在原标题中相对于当前 match 的位置
+                start_in_title = title.find(to_replace, match.start())
+                if start_in_title != -1:
+                    new_title = title[:start_in_title] + s_str + title[start_in_title+len(to_replace):]
                 else:
                     new_title = f"{title} {s_str}"
+            else:
+                new_title = f"{title} {s_str}"
             
+            # 如果是“第13集”这种带关键字的，直接整体替换更干净
+            full_match = match.group(0)
+            if "第" in full_match or any(k in full_match for k in ["集", "话", "P"]):
+                new_title = title.replace(full_match, f" {s_str} ")
+
             return re.sub(r'\s+', ' ', new_title).strip()
         except:
             pass
